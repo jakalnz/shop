@@ -83,7 +83,9 @@ main{max-width:680px;margin:0 auto;padding:0 0 110px}
 
 /* rows */
 .rows{list-style:none;margin:0;padding:0;background:var(--row);border-top:1px solid var(--line);margin-top:8px}
-.row{display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line);min-height:56px;background:var(--row);position:relative}
+.row{display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line);min-height:56px;--bt:0%;background:color-mix(in srgb,var(--row),hsl(var(--h,0) 65% 50%) var(--bt));position:relative}
+.row[style*="--h"]{--bt:11%}
+@media (prefers-color-scheme:dark){.row[style*="--h"]{--bt:16%}}
 .chk{width:56px;height:56px;display:grid;place-items:center;flex:none}
 .chk i{width:26px;height:26px;border:2.5px solid var(--ink);border-radius:5px;display:grid;place-items:center;transition:background .12s}
 .chk svg{width:16px;height:16px;stroke:#fff;stroke-width:3.5;fill:none;stroke-linecap:round;stroke-linejoin:round;opacity:0}
@@ -380,7 +382,8 @@ function row(i, o = {}){
     (curStore() && i.price?.[curStore().id] != null) ? `<span>$${i.price[curStore().id].toFixed(2)}</span>` : '',
     i.hasPhoto ? `<button class="pill plain cam" data-a="photo" aria-label="Show photo">Photo</button>` : ''
   ].join('');
-  return `<li class="row ${i.ticked ? 'done' : ''}" data-id="${i.id}">
+  const h = S.hues?.get(S.cats.includes(i.cat) ? i.cat : 'Other');
+  return `<li class="row ${i.ticked ? 'done' : ''}" data-id="${i.id}"${h != null && !i.ticked ? ` style="--h:${h}"` : ''}>
     <button class="chk" data-a="tick" aria-label="${i.ticked ? 'Untick' : 'Tick'} ${esc(i.name)}"><i>${tickSvg}</i></button>
     <div class="txt" data-a="edit"><div class="nm">${esc(i.name)}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>
     ${o.grip ? `<span class="grip" data-grip aria-label="Drag to reorder">${gripSvg}</span>` : ''}
@@ -390,6 +393,7 @@ function row(i, o = {}){
 function renderList(){
   const st = curStore(); if (!st) return;
   const all = S.items.filter(i => i.onList);
+  const oc = orderedCats(st); S.hues = new Map(oc.map((c, k) => [c, Math.round(k * 360 / oc.length)]));
   const todo = all.filter(i => !i.ticked), done = all.filter(i => i.ticked).sort(byName);
   $('#cnt').textContent = todo.length || '';
   let h = '';
