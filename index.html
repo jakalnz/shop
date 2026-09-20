@@ -269,11 +269,15 @@ function lev(a, b){
 const qtyN = i => { const m = String(i.qty || '').match(/^\s*(\d+(?:\.\d+)?)\s*[x×]?\s*$/i); return m ? +m[1] || 1 : 1; };
 const byName = (a, b) => a.name.localeCompare(b.name, 'en', {sensitivity:'base'});
 let toastT;
-function toast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2400); }
+function toast(m, act){
+  const t = $('#toast'); t.textContent = m;
+  if (act) t.insertAdjacentHTML('beforeend', ` <button class="btn sm" data-a="${act}" style="margin-left:10px">Undo</button>`);
+  t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), act ? 8000 : 2400);
+}
 
 /* ---------- state ---------- */
 const S = {
-  user:null, items:[], stores:[], aliases:{}, rc:[], cats:[...DEFAULT_CATS],
+  user:null, items:[], stores:[], trips:[], undo:null, aliases:{}, rc:[], cats:[...DEFAULT_CATS],
   storeId: localStorage.getItem('storeId') || '',
   sort: localStorage.getItem('sort') || 'shop',
   tab:'list', dragging:false, pending:false, liveSheet:null
@@ -327,6 +331,10 @@ function subscribe(){
       setDoc(doc(db,'stores','default'), { name:'Supermarket', catOrder:[...S.cats] });
     if (!S.stores.find(s => s.id === S.storeId)) S.storeId = S.stores[0]?.id || '';
     render();
+  }, denied));
+  unsubs.push(onSnapshot(collection(db,'trips'), snap => {
+    S.trips = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => b.at - a.at);
+    if (S.liveSheet) S.liveSheet();
   }, denied));
   unsubs.push(onSnapshot(doc(db,'meta','aliases'), snap => { S.aliases = snap.exists() ? (snap.data().map || {}) : {}; }, denied));
   unsubs.push(onSnapshot(doc(db,'meta','settings'), snap => {
@@ -582,17 +590,37 @@ async function finishShop(){
   const done = S.items.filter(i => i.onList && i.ticked), left = S.items.filter(i => i.onList && !i.ticked).length;
   if (!done.length){ toast('Tick some items first'); return; }
   if (!confirm(`Finish shop?\n${done.length} ticked item${done.length===1?'':'s'} come off the list${left ? `, ${left} stay on it` : ''}.`)) return;
-  const b = writeBatch(db);
+  const b = writeBatch(db), tid = saveTrip(b, 'finished', done);
   done.forEach(i => i.misc ? b.delete(iref(i.id))
     : b.update(iref(i.id), { onList:false, ticked:false, qty:'', note:'', count:increment(1), last:serverTimestamp() }));
-  await b.commit(); toast('Shop finished');
+  S.undo = { tid, items:snap(done), uncount:true };
+  await b.commit(); toast('Shop finished', 'undo');
 }
 async function clearAll(){
   const all = S.items.filter(i => i.onList);
   if (!confirm(`Clear all ${all.length} items from the list?`)) return;
-  const b = writeBatch(db);
+  const b = writeBatch(db), tid = saveTrip(b, 'cleared', all);
   all.forEach(i => i.misc ? b.delete(iref(i.id)) : b.update(iref(i.id), { onList:false, ticked:false, qty:'', note:'' }));
-  await b.commit(); toast('List cleared');
+  S.undo = { tid, items:snap(all), uncount:false };
+  await b.commit(); toast('List cleared', 'undo');
+}
+/* ---------- list history ---------- */
+const MAX_TRIPS = 20;
+const snap = its => its.map(i => ({ id:i.id, name:i.name, cat:i.cat || 'Other', qty:i.qty || '', note:i.note || '', ticked:!!i.ticked, misc:!!i.misc }));
+function saveTrip(b, kind, its){
+  const ref = doc(collection(db,'trips'));
+  b.set(ref, { at:Date.now(), kind, store:curStore()?.name || '', items:snap(its) });
+  S.trips.slice(MAX_TRIPS - 1).forEach(t => b.delete(doc(db,'trips',t.id)));
+  return ref.id;
+}
+async function restoreItems(items, { keepTicks, uncount }){
+  const b = writeBatch(db);
+  items.forEach(it => {
+    const cur = byId(it.id), f = { onList:true, ticked: keepTicks && it.ticked, qty:it.qty, note:it.note };
+    if (cur) b.update(iref(it.id), uncount && !it.misc ? { ...f, count:increment(-1) } : f);
+    else b.set(iref(it.id), { ...f, name:it.name, cat:it.cat, misc:it.misc, count:0, pos:{}, created:serverTimestamp() });
+  });
+  await b.commit();
 }
 
 /* ---------- duplicates ---------- */
@@ -815,6 +843,15 @@ async function applyReceipt(){
 function openSettings(view = 'main'){
   S.liveSheet = () => openSettings(view);
   const st = S.stores;
+  if (view === 'history'){
+    const when = t => new Date(t.at).toLocaleString('en-NZ', { weekday:'short', day:'numeric', month:'short', hour:'numeric', minute:'2-digit' });
+    openSheet(`<h2>List history</h2><p class="note">Your last ${MAX_TRIPS} finished or cleared lists. Restore puts the items back on the list.</p>
+      ${S.trips.length ? S.trips.map(t => `<div class="mini" data-id="${t.id}"><span class="grow"><strong>${t.kind === 'finished' ? 'Finished' : 'Cleared'}</strong>${t.store ? ' · ' + esc(t.store) : ''}<br><span class="note">${esc(when(t))} · ${t.items.length} item${t.items.length === 1 ? '' : 's'}</span>
+        <br><span class="note">${esc(t.items.slice(0, 6).map(i => i.name).join(', '))}${t.items.length > 6 ? '…' : ''}</span></span>
+        <button class="btn sm" data-a="restoreTrip" data-id="${t.id}">Restore</button><button class="btn sm danger" data-a="delTrip" data-id="${t.id}">✕</button></div>`).join('') : '<p class="note">Nothing yet. Finishing or clearing a list saves it here.</p>'}
+      <div class="btns"><button class="btn" data-a="settings">Back</button></div>`);
+    return;
+  }
   if (view.startsWith('order:')){
     const s = st.find(x => x.id === view.slice(6)); if (!s){ openSettings('main'); return; }
     const cats = orderedCats(s);
@@ -835,6 +872,8 @@ function openSettings(view = 'main'){
       <button class="btn sm" data-a="renCat" data-c="${esc(c)}">Rename</button>
       ${c !== 'Other' ? `<button class="btn sm danger" data-a="delCat" data-c="${esc(c)}">✕</button>` : ''}</div>`).join('')}
     <div class="mini"><input id="newCat" placeholder="Add a category"><button class="btn sm pri" data-a="addCat">Add</button></div>
+    <h3>History</h3>
+    <div class="btns"><button class="btn sm" data-a="histView">List history (${S.trips.length})</button></div>
     <h3>Receipt scanning</h3>
     <p class="note">${localStorage.getItem('anthropicKey') ? 'An API key is saved on this phone.' : 'No API key on this phone.'} Use a key with a low monthly spend limit.</p>
     <div class="btns" style="margin-top:6px"><button class="btn sm" data-a="setKey">${localStorage.getItem('anthropicKey') ? 'Replace key' : 'Add key'}</button>
@@ -875,6 +914,19 @@ const A = {
     await b.commit(); if ($('#photoBox')) $('#photoBox').innerHTML = ''; toast('Photo removed');
   },
   settings: () => openSettings('main'),
+  histView: () => openSettings('history'),
+  restoreTrip: async t => {
+    const tr = S.trips.find(x => x.id === t.dataset.id); if (!tr) return;
+    await restoreItems(tr.items, { keepTicks:false, uncount:false });
+    closeSheet(); toast(`Restored ${tr.items.length} item${tr.items.length === 1 ? '' : 's'}`);
+  },
+  delTrip: async t => { await deleteDoc(doc(db,'trips',t.dataset.id)); },
+  undo: async () => {
+    const u = S.undo; if (!u) return; S.undo = null;
+    $('#toast').classList.remove('on');
+    const b = writeBatch(db); b.delete(doc(db,'trips',u.tid)); await b.commit();
+    await restoreItems(u.items, { keepTicks:true, uncount:u.uncount }); toast('Restored');
+  },
   orderView: t => openSettings('order:' + t.dataset.id),
   signout: () => { closeSheet(); signOut(auth); },
   saveEdit: async t => {
