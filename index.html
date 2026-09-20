@@ -96,6 +96,7 @@ main{max-width:680px;margin:0 auto;padding:0 0 110px}
 .row.done .nm{text-decoration:line-through;color:var(--mute)}
 .row.done .txt .sub{opacity:.7}
 .grip{width:52px;height:56px;display:grid;place-items:center;touch-action:none;cursor:grab;color:var(--mute);flex:none}
+.mini .grip{width:40px;height:40px}.mini.drag{background:var(--tag);color:var(--tag-ink);box-shadow:0 4px 14px rgba(0,0,0,.25);position:relative}
 .grip svg{width:18px;height:18px}
 .row.drag{box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:2;background:var(--tag)}
 .row.drag .nm,.row.drag .sub{color:var(--tag-ink)}
@@ -813,10 +814,8 @@ function openSettings(view = 'main'){
   if (view.startsWith('order:')){
     const s = st.find(x => x.id === view.slice(6)); if (!s){ openSettings('main'); return; }
     const cats = orderedCats(s);
-    openSheet(`<h2>Aisle order: ${esc(s.name)}</h2><p class="note">Categories in the order you walk past them. New items land in their category's spot, and you can fine-tune by dragging on the list.</p>
-      ${cats.map((c, i) => `<div class="mini"><span class="grow">${esc(c)}</span>
-        <button class="btn sm" data-a="catMove" data-s="${s.id}" data-i="${i}" data-d="-1" ${i===0?'disabled':''}>↑</button>
-        <button class="btn sm" data-a="catMove" data-s="${s.id}" data-i="${i}" data-d="1" ${i===cats.length-1?'disabled':''}>↓</button></div>`).join('')}
+    openSheet(`<h2>Aisle order: ${esc(s.name)}</h2><p class="note">Categories in the order you walk past them. New items land in their category's spot, and you can fine-tune by dragging on the list. Drag the handles to reorder.</p>
+      <div id="catList" data-s="${s.id}">${cats.map(c => `<div class="mini" data-cat="${esc(c)}"><span class="grip" data-catgrip aria-label="Drag to reorder">${gripSvg}</span><span class="grow">${esc(c)}</span></div>`).join('')}</div>
       <div class="btns"><button class="btn" data-a="settings">Back</button></div>`);
     return;
   }
@@ -975,6 +974,25 @@ document.addEventListener('pointerdown', e => {
     S.dragging = false;
     if (changed) { try { await w.commit(); } catch (err){ toast('Could not save the new order'); } }
     S.pending = false; render();
+  };
+  window.addEventListener('pointermove', move, { passive:false });
+  window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+});
+/* ---------- drag to reorder (aisle order) ---------- */
+document.addEventListener('pointerdown', e => {
+  const g = e.target.closest('[data-catgrip]'); if (!g) return;
+  const el = g.closest('.mini'), list = el.parentElement, sid = list.dataset.s;
+  e.preventDefault(); S.dragging = true; el.classList.add('drag');
+  const move = ev => {
+    ev.preventDefault(); let before = null;
+    for (const s of list.querySelectorAll('.mini:not(.drag)')){ const r = s.getBoundingClientRect(); if (ev.clientY < r.top + r.height / 2){ before = s; break; } }
+    list.insertBefore(el, before);
+  };
+  const up = async () => {
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+    el.classList.remove('drag'); S.dragging = false;
+    const order = [...list.children].map(x => x.dataset.cat);
+    try { await updateDoc(doc(db,'stores',sid), { catOrder:order }); } catch (err){ toast('Could not save the aisle order'); }
   };
   window.addEventListener('pointermove', move, { passive:false });
   window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
