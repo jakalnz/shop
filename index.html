@@ -1,0 +1,984 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shop</title>
+<meta name="theme-color" content="#14213d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#14213d; --paper:#f3f5f7; --row:#ffffff; --tag:#ffd23f; --tag-ink:#3a2f00;
+  --ok:#1f9d63; --mute:#68738a; --line:#dde2ea; --danger:#c8372d;
+  --disp:'Bricolage Grotesque','Arial Narrow',system-ui,sans-serif;
+  --body:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --ink:#e9edf5; --paper:#0f1626; --row:#172038; --tag:#ffd23f; --tag-ink:#2a2200; --ok:#3ccf8a; --mute:#8f9bb3; --line:#27324d; --danger:#ff6b5e; }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.4 var(--body)}
+body{padding-bottom:env(safe-area-inset-bottom,0)}
+[hidden]{display:none!important}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:3px solid var(--tag);outline-offset:2px}
+h1,h2,h3{font-family:var(--disp);margin:0}
+
+/* header */
+header{position:sticky;top:0;z-index:5;background:var(--ink);color:#fff;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 0}
+@media (prefers-color-scheme:dark){header{background:#0a0f1c;border-bottom:1px solid var(--line)}}
+.top{display:flex;align-items:center;gap:10px}
+.top h1{font-size:30px;font-weight:800;letter-spacing:-.02em;flex:1}
+.storesel{background:var(--tag);color:var(--tag-ink);border:0;border-radius:4px;padding:6px 26px 6px 10px;font-weight:600;max-width:52vw;
+  appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--tag-ink) 50%),linear-gradient(135deg,var(--tag-ink) 50%,transparent 50%);
+  background-position:calc(100% - 15px) 55%,calc(100% - 10px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+.iconbtn{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:#fff}
+.iconbtn:hover{background:rgba(255,255,255,.12)}
+.tabs{display:flex;gap:4px;margin-top:8px}
+.tabs button{flex:1;padding:10px 0 9px;font-weight:600;color:#aeb8cf;border-bottom:3px solid transparent}
+.tabs button.on{color:#fff;border-color:var(--tag)}
+.tabs b{background:var(--tag);color:var(--tag-ink);border-radius:10px;padding:0 7px;font-size:13px;margin-left:4px}
+.tabs b:empty{display:none}
+
+main{max-width:680px;margin:0 auto;padding:0 0 110px}
+
+/* add bar */
+.addbar{padding:12px 14px 4px;position:relative}
+.addbar input,.search input{width:100%;border:2px solid var(--ink);background:var(--row);border-radius:6px;padding:12px 14px;font-size:17px}
+.addbar input:focus,.search input:focus{outline:none;border-color:var(--tag);box-shadow:0 0 0 3px rgba(255,210,63,.45)}
+#sug{margin-top:6px;background:var(--row);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+#sug:empty{display:none}
+#sug button{display:flex;width:100%;text-align:left;padding:12px 14px;gap:10px;align-items:center;border-bottom:1px solid var(--line)}
+#sug button:last-child{border-bottom:0}
+#sug button:hover{background:rgba(255,210,63,.18)}
+#sug .grow{flex:1}
+.pill{font-size:12px;background:var(--tag);color:var(--tag-ink);border-radius:3px;padding:1px 6px;font-weight:600;white-space:nowrap}
+.pill.plain{background:transparent;color:var(--mute);border:1px solid var(--line)}
+.state{font-size:13px;color:var(--mute)}
+.newopt{font-weight:600}
+.newopt small{display:block;font-weight:400;color:var(--mute)}
+
+#usual{padding:6px 14px 0}
+#usual summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 0;list-style:none}
+#usual summary::-webkit-details-marker{display:none}
+#usual summary::before{content:'+ '}
+#usual[open] summary::before{content:'– '}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 8px}
+.chips button{border:1.5px solid var(--ink);border-radius:20px;padding:5px 12px;font-size:15px;background:var(--row)}
+.chips button:active{background:var(--tag)}
+
+.seg{display:flex;margin:10px 14px 4px;border:1.5px solid var(--ink);border-radius:6px;overflow:hidden}
+.seg button{flex:1;padding:8px 4px;font-size:14px;font-weight:600}
+.seg button+button{border-left:1.5px solid var(--ink)}
+.seg button.on{background:var(--ink);color:var(--paper)}
+.hint{margin:4px 14px 0;color:var(--mute);font-size:13px}
+
+/* rows */
+.rows{list-style:none;margin:0;padding:0;background:var(--row);border-top:1px solid var(--line);margin-top:8px}
+.row{display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line);min-height:56px;background:var(--row);position:relative}
+.chk{width:56px;height:56px;display:grid;place-items:center;flex:none}
+.chk i{width:26px;height:26px;border:2.5px solid var(--ink);border-radius:5px;display:grid;place-items:center;transition:background .12s}
+.chk svg{width:16px;height:16px;stroke:#fff;stroke-width:3.5;fill:none;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+.row.done .chk i{background:var(--ok);border-color:var(--ok)}
+.row.done .chk svg{opacity:1}
+.txt{flex:1;min-width:0;padding:8px 0;cursor:pointer}
+.nm{font-size:18px;font-weight:500;overflow-wrap:anywhere}
+.sub{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;align-items:center;font-size:13px;color:var(--mute)}
+.qty{font-weight:600;color:var(--ink)}
+.row.done .nm{text-decoration:line-through;color:var(--mute)}
+.row.done .txt .sub{opacity:.7}
+.grip{width:52px;height:56px;display:grid;place-items:center;touch-action:none;cursor:grab;color:var(--mute);flex:none}
+.grip svg{width:18px;height:18px}
+.row.drag{box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:2;background:var(--tag)}
+.row.drag .nm,.row.drag .sub{color:var(--tag-ink)}
+.sec{font-size:17px;padding:22px 14px 0;color:var(--mute)}
+.cathead{font-size:15px;font-weight:800;padding:16px 14px 0;margin:0;font-family:var(--disp)}
+.empty{padding:36px 24px;text-align:center;color:var(--mute)}
+.toggle{width:56px;height:56px;display:grid;place-items:center;flex:none;font-size:26px;line-height:1}
+.toggle.in{color:var(--ok);font-size:22px;font-weight:800}
+
+.actions{display:flex;gap:8px;padding:22px 14px 0}
+.btn{border:2px solid var(--ink);border-radius:6px;padding:10px 14px;font-weight:600;background:var(--row)}
+.btn.pri{background:var(--ink);color:var(--paper)}
+.btn.tag{background:var(--tag);color:var(--tag-ink);border-color:var(--tag)}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.btn.sm{padding:6px 10px;font-size:14px}
+.actions .btn{flex:1}
+
+/* items tab */
+.search{padding:12px 14px 4px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.search input{grid-column:1/3}
+.search select{border:1.5px solid var(--ink);background:var(--row);border-radius:6px;padding:9px 8px}
+.toolrow{display:flex;gap:8px;flex-wrap:wrap;padding:8px 14px 0}
+.count{padding:10px 14px 0;color:var(--mute);font-size:13px}
+
+/* sheet */
+#sheet{position:fixed;inset:0;z-index:20;display:none}
+#sheet.on{display:block}
+.scrim{position:absolute;inset:0;background:rgba(10,15,28,.55)}
+.panel{position:absolute;left:0;right:0;bottom:0;max-width:680px;margin:0 auto;background:var(--paper);border-radius:14px 14px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 18px);max-height:88vh;overflow:auto;animation:up .18s ease-out}
+@keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.panel{animation:none}}
+.panel h2{font-size:24px;margin-bottom:12px;overflow-wrap:anywhere}
+.panel h3{font-size:17px;margin:20px 0 6px}
+label{display:block;font-size:14px;font-weight:600;margin:10px 0 0}
+label input:not([type=checkbox]):not([type=radio]),label select,label textarea{display:block;width:100%;margin-top:4px;border:1.5px solid var(--ink);background:var(--row);border-radius:6px;padding:10px 12px;font-weight:400;font-size:16px}
+label.cb{display:flex;gap:10px;align-items:center;font-weight:500}
+label.cb input{width:20px;height:20px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.mini{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.mini input{flex:1;border:1.5px solid var(--line);background:var(--row);border-radius:6px;padding:8px 10px;min-width:0}
+.mini span.grow{flex:1}
+.cluster{background:var(--row);border:1.5px solid var(--ink);border-radius:8px;padding:10px 12px;margin:10px 0}
+.cluster label.cb{margin:0;padding:6px 0}
+.note{color:var(--mute);font-size:14px;margin:6px 0}
+textarea{min-height:170px}
+.photo img{display:block;width:100%;max-height:52vh;object-fit:contain;border-radius:6px;background:var(--row);margin-top:6px}
+.cam{cursor:pointer}
+.est{margin:14px 14px 0;padding:10px 12px;border-left:5px solid var(--tag);background:var(--row);font-size:15px}
+.est b{font-family:var(--disp);font-size:22px}
+.est span{color:var(--mute);font-size:13px;display:block}
+.mini select{flex:1;min-width:0;border:1.5px solid var(--line);background:var(--row);border-radius:6px;padding:8px}
+
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:6px;z-index:40;font-weight:500;max-width:90vw;display:none}
+#toast.on{display:block}
+
+/* login */
+.center{min-height:100vh;display:grid;place-items:center;padding:24px;text-align:center}
+.center .box{max-width:360px}
+.center h1{font-size:64px;font-weight:800;letter-spacing:-.03em;background:var(--tag);color:var(--tag-ink);display:inline-block;padding:0 14px;border-radius:4px;margin-bottom:16px}
+.center p{color:var(--mute)}
+.center code{background:var(--row);padding:1px 5px;border-radius:3px;font-size:14px}
+</style>
+</head>
+<body>
+
+<div id="login" class="center" hidden>
+  <div class="box">
+    <h1>Shop</h1>
+    <p id="loginMsg">Our shared shopping list.</p>
+    <p><button class="btn pri" id="signin" style="width:100%;padding:14px">Sign in with Google</button></p>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div class="top">
+      <h1>Shop</h1>
+      <select id="storeSel" class="storesel" aria-label="Store"></select>
+      <button class="iconbtn" data-a="settings" aria-label="Settings">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+    </div>
+    <nav class="tabs">
+      <button data-a="tab" data-tab="list" class="on">List <b id="cnt"></b></button>
+      <button data-a="tab" data-tab="items">Items</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="vList">
+      <div class="addbar">
+        <input id="add" placeholder="Add an item" autocomplete="off" autocapitalize="sentences" enterkeyhint="done">
+        <div id="sug"></div>
+      </div>
+      <details id="usual"></details>
+      <div class="seg" id="sortSeg">
+        <button data-a="sort" data-s="shop">Shop order</button>
+        <button data-a="sort" data-s="cat">Category</button>
+        <button data-a="sort" data-s="az">A–Z</button>
+      </div>
+      <div id="listBody"></div>
+      <div class="actions" id="listActions"></div>
+    </section>
+
+    <section id="vItems" hidden>
+      <div class="search">
+        <input id="iq" type="search" placeholder="Search your items" autocomplete="off">
+        <select id="icat" aria-label="Category filter"></select>
+        <select id="isort" aria-label="Sort">
+          <option value="az">A–Z</option>
+          <option value="cat">By category</option>
+          <option value="freq">Most bought</option>
+        </select>
+      </div>
+      <div class="toolrow">
+        <button class="btn sm" data-a="newItem">+ New item</button>
+        <button class="btn sm" data-a="dupes">Tidy duplicates</button>
+        <button class="btn sm" data-a="importer">Import</button>
+        <button class="btn sm" data-a="receipt">Receipt prices</button>
+        <button class="btn sm" data-a="export">Export</button>
+      </div>
+      <div class="count" id="icount"></div>
+      <div id="itemsBody"></div>
+    </section>
+  </main>
+</div>
+
+<div id="sheet"></div>
+<div id="toast" role="status"></div>
+
+<script type="module">
+/* ============================================================
+   1. PASTE YOUR FIREBASE CONFIG HERE (see SETUP.md)
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyARWlYTJx1V1sdmVRMZ9I23B3pC9jXUryY",
+  authDomain: "shop-bf13d.firebaseapp.com",
+  projectId: "shop-bf13d",
+  storageBucket: "shop-bf13d.firebasestorage.app",
+  messagingSenderId: "339368462844",
+  appId: "1:339368462844:web:75204fd7495a5982c10a79"
+};
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot,
+  setDoc, getDoc, updateDoc, deleteDoc, deleteField, addDoc, writeBatch, serverTimestamp, increment, arrayUnion, arrayRemove }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const DEFAULT_CATS = ['Fruit & Veg','Bakery','Meat & Fish','Deli & Chilled','Dairy & Eggs','Frozen','Pantry','Tins & Jars','Snacks','Drinks','Cleaning','Health & Beauty','Household','Pets','Other'];
+const singular = w => w.length > 3 ? (w.endsWith('ies') ? w.slice(0,-3)+'y' : w.endsWith('oes') ? w.slice(0,-2) : (w.endsWith('s') && !w.endsWith('ss')) ? w.slice(0,-1) : w) : w;
+const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]+/g,' ').split(/\s+/).filter(Boolean).map(singular).join(' ');
+const key = s => norm(s).split(' ').sort().join(' ');
+function lev(a, b){
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > 3) return 9;
+  let p = Array.from({length:b.length+1}, (_, i) => i);
+  for (let i = 1; i <= a.length; i++){
+    const c = [i];
+    for (let j = 1; j <= b.length; j++) c[j] = Math.min(p[j]+1, c[j-1]+1, p[j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+    p = c;
+  }
+  return p[b.length];
+}
+const qtyN = i => { const m = String(i.qty || '').match(/^\s*(\d+(?:\.\d+)?)\s*[x×]?\s*$/i); return m ? +m[1] || 1 : 1; };
+const byName = (a, b) => a.name.localeCompare(b.name, 'en', {sensitivity:'base'});
+let toastT;
+function toast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2400); }
+
+/* ---------- state ---------- */
+const S = {
+  user:null, items:[], stores:[], aliases:{}, rc:[], cats:[...DEFAULT_CATS],
+  storeId: localStorage.getItem('storeId') || '',
+  sort: localStorage.getItem('sort') || 'shop',
+  tab:'list', dragging:false, pending:false, liveSheet:null
+};
+const byId = id => S.items.find(i => i.id === id);
+const curStore = () => S.stores.find(s => s.id === S.storeId) || S.stores[0];
+const iref = id => doc(db, 'items', id);
+let app, auth, db, unsubs = [];
+
+/* ---------- boot ---------- */
+const configured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith('PASTE');
+if (!configured){
+  $('#login').hidden = false;
+  $('#loginMsg').innerHTML = 'Almost there. Open <code>index.html</code> and paste your Firebase config into <code>firebaseConfig</code> (see SETUP.md).';
+  $('#signin').hidden = true;
+} else {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  onAuthStateChanged(auth, u => {
+    S.user = u;
+    unsubs.forEach(f => f()); unsubs = [];
+    $('#login').hidden = !!u; $('#app').hidden = !u;
+    if (u) subscribe();
+  });
+  $('#signin').onclick = async () => {
+    const p = new GoogleAuthProvider();
+    try { await signInWithPopup(auth, p); }
+    catch (e){ if (e.code !== 'auth/popup-closed-by-user') signInWithRedirect(auth, p); }
+  };
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+function denied(e){
+  console.error(e);
+  if (e.code === 'permission-denied'){
+    unsubs.forEach(f => f()); unsubs = [];
+    $('#app').hidden = true; $('#login').hidden = false;
+    $('#loginMsg').textContent = `${S.user?.email || 'This account'} isn't allowed to use this list. Sign in with one of the two household Google accounts.`;
+    signOut(auth);
+  }
+}
+function subscribe(){
+  unsubs.push(onSnapshot(collection(db,'items'), snap => {
+    S.items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    render();
+  }, denied));
+  unsubs.push(onSnapshot(collection(db,'stores'), snap => {
+    S.stores = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => a.name.localeCompare(b.name));
+    if (!snap.metadata.fromCache && snap.empty)
+      setDoc(doc(db,'stores','default'), { name:'Supermarket', catOrder:[...S.cats] });
+    if (!S.stores.find(s => s.id === S.storeId)) S.storeId = S.stores[0]?.id || '';
+    render();
+  }, denied));
+  unsubs.push(onSnapshot(doc(db,'meta','aliases'), snap => { S.aliases = snap.exists() ? (snap.data().map || {}) : {}; }, denied));
+  unsubs.push(onSnapshot(doc(db,'meta','settings'), snap => {
+    if (snap.exists()) S.cats = snap.data().cats || S.cats;
+    else if (!snap.metadata.fromCache) setDoc(doc(db,'meta','settings'), { cats:[...DEFAULT_CATS] });
+    render();
+  }, denied));
+}
+
+/* ---------- shop-order maths ---------- */
+function orderedCats(st){
+  const o = (st?.catOrder || []).filter(c => S.cats.includes(c));
+  return [...o, ...S.cats.filter(c => !o.includes(c))];
+}
+function posFn(st){
+  const idx = new Map(orderedCats(st).map((c,i) => [c,i]));
+  return i => (i.pos && i.pos[st.id] != null) ? i.pos[st.id] : (idx.get(i.cat) ?? 999) * 1000 + 500;
+}
+const cmpShop = st => { const p = posFn(st); return (a,b) => (p(a) - p(b)) || byName(a,b); };
+
+/* ---------- render ---------- */
+function render(){
+  if (S.dragging){ S.pending = true; return; }
+  if (!S.user) return;
+  const sel = $('#storeSel');
+  sel.innerHTML = S.stores.map(s => `<option value="${s.id}" ${s.id===S.storeId?'selected':''}>${esc(s.name)}</option>`).join('');
+  document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.s === S.sort));
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+  $('#vList').hidden = S.tab !== 'list'; $('#vItems').hidden = S.tab !== 'items';
+  if (S.tab === 'list'){ renderList(); renderUsual(); renderSug(); } else renderItems();
+  if (S.liveSheet) S.liveSheet();
+}
+
+const gripSvg = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.8"/><circle cx="15" cy="6" r="1.8"/><circle cx="9" cy="12" r="1.8"/><circle cx="15" cy="12" r="1.8"/><circle cx="9" cy="18" r="1.8"/><circle cx="15" cy="18" r="1.8"/></svg>';
+const tickSvg = '<svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg>';
+
+function row(i, o = {}){
+  const sub = [
+    i.qty ? `<span class="qty">${esc(i.qty)}</span>` : '',
+    i.note ? `<span>${esc(i.note)}</span>` : '',
+    o.chip ? `<span class="pill plain">${esc(i.cat || 'Other')}</span>` : '',
+    i.misc ? `<span class="pill plain">one-off</span>` : '',
+    (curStore() && i.price?.[curStore().id] != null) ? `<span>$${i.price[curStore().id].toFixed(2)}</span>` : '',
+    i.hasPhoto ? `<button class="pill plain cam" data-a="photo" aria-label="Show photo">Photo</button>` : ''
+  ].join('');
+  return `<li class="row ${i.ticked ? 'done' : ''}" data-id="${i.id}">
+    <button class="chk" data-a="tick" aria-label="${i.ticked ? 'Untick' : 'Tick'} ${esc(i.name)}"><i>${tickSvg}</i></button>
+    <div class="txt" data-a="edit"><div class="nm">${esc(i.name)}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>
+    ${o.grip ? `<span class="grip" data-grip aria-label="Drag to reorder">${gripSvg}</span>` : ''}
+  </li>`;
+}
+
+function renderList(){
+  const st = curStore(); if (!st) return;
+  const all = S.items.filter(i => i.onList);
+  const todo = all.filter(i => !i.ticked), done = all.filter(i => i.ticked).sort(byName);
+  $('#cnt').textContent = todo.length || '';
+  let h = '';
+  if (!all.length) h = `<p class="empty">Nothing on the list yet.<br>Type above, or tap a suggestion.</p>`;
+  if (todo.length){
+    if (S.sort === 'shop'){
+      todo.sort(cmpShop(st));
+      if (todo.length > 1) h += `<p class="hint">Order for ${esc(st.name)}. Drag the handles to fix it.</p>`;
+      h += `<ul class="rows" id="shopRows">${todo.map(i => row(i, {grip:true, chip:true})).join('')}</ul>`;
+    } else if (S.sort === 'az'){
+      todo.sort(byName);
+      h += `<ul class="rows">${todo.map(i => row(i, {chip:true})).join('')}</ul>`;
+    } else {
+      for (const c of orderedCats(st)){
+        const g = todo.filter(i => (i.cat || 'Other') === c).sort(byName);
+        if (g.length) h += `<h3 class="cathead">${esc(c)}</h3><ul class="rows">${g.map(i => row(i)).join('')}</ul>`;
+      }
+      const stray = todo.filter(i => !S.cats.includes(i.cat));
+      if (stray.length) h += `<h3 class="cathead">Other</h3><ul class="rows">${stray.sort(byName).map(i => row(i)).join('')}</ul>`;
+    }
+  }
+  if (done.length) h += `<h3 class="sec">In the trolley (${done.length})</h3><ul class="rows">${done.map(i => row(i)).join('')}</ul>`;
+  if (all.length){
+    const priced = all.filter(i => i.price?.[st.id] != null);
+    const est = priced.reduce((t, i) => t + i.price[st.id] * qtyN(i), 0);
+    h += priced.length
+      ? `<div class="est"><b>~$${est.toFixed(2)}</b> at ${esc(st.name)}<span>${priced.length} of ${all.length} items priced. Add prices in an item's details.</span></div>`
+      : `<div class="est"><span style="display:block">Add a price to an item's details to see an estimate for ${esc(st.name)}.</span></div>`;
+  }
+  $('#listBody').innerHTML = h;
+  $('#listActions').innerHTML = all.length
+    ? `<button class="btn tag" data-a="finish">Finish shop</button><button class="btn" data-a="clearAll">Clear list</button>` : '';
+}
+
+function renderUsual(){
+  const u = S.items.filter(i => !i.misc && !i.onList && (i.count || 0) > 0)
+    .sort((a,b) => (b.count||0) - (a.count||0) || byName(a,b)).slice(0, 14);
+  const el = $('#usual');
+  if (!u.length || $('#add').value.trim()){ el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `<summary>Usually buy</summary><div class="chips">${u.map(i => `<button data-a="quick" data-id="${i.id}">${esc(i.name)}</button>`).join('')}</div>`;
+}
+
+/* ---------- suggestions / add ---------- */
+function matches(q){
+  const qn = norm(q); if (!qn) return [];
+  const out = [];
+  for (const i of S.items){
+    if (i.misc) continue;
+    const n = norm(i.name); let sc = 9;
+    if (n === qn) sc = 0;
+    else if (n.startsWith(qn)) sc = 1;
+    else if (n.split(' ').some(w => w.startsWith(qn)) || n.includes(qn)) sc = 2;
+    else if (qn.length >= 4 && lev(n, qn) <= 1) sc = 3;
+    if (sc < 9) out.push({ i, sc });
+  }
+  return out.sort((a,b) => a.sc - b.sc || (b.i.count||0) - (a.i.count||0) || byName(a.i, b.i)).slice(0, 8);
+}
+function renderSug(){
+  const q = $('#add').value.trim(), box = $('#sug');
+  if (!q){ box.innerHTML = ''; return; }
+  const m = matches(q), exact = m.some(x => x.sc === 0);
+  let h = m.map(({i}) => `<button data-a="sugAdd" data-id="${i.id}">
+      <span class="grow">${esc(i.name)}</span><span class="pill plain">${esc(i.cat || 'Other')}</span>
+      <span class="state">${i.onList ? (i.ticked ? 'in trolley' : 'on list') : ''}</span></button>`).join('');
+  if (!exact) h += `<button class="newopt" data-a="addMisc"><span class="grow">Add “${esc(q)}” just this once<small>Not saved to your items</small></span></button>
+    <button class="newopt" data-a="addNew"><span class="grow">Add “${esc(q)}” to your items<small>Saved for every future shop</small></span></button>`;
+  box.innerHTML = h;
+}
+async function addToList(i){
+  if (i.onList){ if (i.ticked) await updateDoc(iref(i.id), { ticked:false }); toast(`${i.name} is already on the list`); }
+  else { await updateDoc(iref(i.id), { onList:true, ticked:false }); toast(`Added ${i.name}`); }
+}
+function clearAdd(){ $('#add').value = ''; renderSug(); renderUsual(); }
+async function addMisc(name){
+  await addDoc(collection(db,'items'), { name, cat:'Other', misc:true, onList:true, ticked:false, qty:'', note:'', count:0, pos:{}, created:serverTimestamp() });
+  toast(`Added ${name}`); clearAdd();
+}
+$('#add').addEventListener('input', () => { renderSug(); renderUsual(); });
+$('#add').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const q = e.target.value.trim(); if (!q) return;
+  const m = matches(q);
+  if (m.length && m[0].sc <= 1){ addToList(m[0].i); clearAdd(); } else addMisc(q);
+});
+
+/* ---------- items tab ---------- */
+function renderItems(){
+  const cs = $('#icat'), cur = cs.value;
+  cs.innerHTML = `<option value="">All categories</option>` + S.cats.map(c => `<option ${c===cur?'selected':''}>${esc(c)}</option>`).join('');
+  const q = norm($('#iq').value), cat = cs.value, sort = $('#isort').value;
+  let list = S.items.filter(i => !i.misc && (!q || norm(i.name).includes(q)) && (!cat || i.cat === cat));
+  const st = curStore();
+  if (sort === 'az') list.sort(byName);
+  else if (sort === 'freq') list.sort((a,b) => (b.count||0) - (a.count||0) || byName(a,b));
+  else { const idx = new Map(orderedCats(st).map((c,i) => [c,i])); list.sort((a,b) => ((idx.get(a.cat)??99) - (idx.get(b.cat)??99)) || byName(a,b)); }
+  $('#icount').textContent = `${list.length} item${list.length===1?'':'s'}`;
+  $('#itemsBody').innerHTML = `<ul class="rows">${list.map(i => `<li class="row" data-id="${i.id}">
+    <div class="txt" data-a="edit" style="padding-left:14px"><div class="nm">${esc(i.name)}</div>
+      <div class="sub"><span class="pill plain">${esc(i.cat || 'Other')}</span>${i.count ? `<span>bought ${i.count}×</span>` : ''}</div></div>
+    <button class="toggle ${i.onList ? 'in' : ''}" data-a="toggleList" aria-label="${i.onList ? 'Remove from list' : 'Add to list'}">${i.onList ? '✓' : '+'}</button></li>`).join('')}</ul>`;
+}
+['input','change'].forEach(ev => { $('#iq').addEventListener(ev, renderItems); $('#icat').addEventListener(ev, renderItems); $('#isort').addEventListener(ev, renderItems); });
+
+/* ---------- sheets ---------- */
+function openSheet(html){ $('#sheet').innerHTML = `<div class="scrim" data-a="closeSheet"></div><div class="panel" role="dialog">${html}</div>`; $('#sheet').classList.add('on'); }
+function closeSheet(){ S.liveSheet = null; $('#sheet').classList.remove('on'); $('#sheet').innerHTML = ''; }
+const catOpts = sel => { const cs = S.cats.includes(sel) || !sel ? S.cats : [...S.cats, sel];
+  return cs.map(c => `<option ${c === (sel || 'Other') ? 'selected' : ''}>${esc(c)}</option>`).join('') + `<option value="__new">+ New category…</option>`; };
+document.addEventListener('change', async e => {
+  const t = e.target;
+  if (t.matches('select[data-cat]') && t.value === '__new'){
+    const n = (prompt('New category name') || '').trim();
+    if (!n){ t.selectedIndex = 0; return; }
+    if (!S.cats.includes(n)) await updateDoc(doc(db,'meta','settings'), { cats: arrayUnion(n) });
+    const o = document.createElement('option'); o.textContent = n; t.insertBefore(o, t.lastElementChild); t.value = n;
+  }
+  if (t.id === 'f_photo' && t.files[0]) savePhoto(S.editId, t.files[0]);
+  if (t.id === 'rc_file' && t.files.length){ const fs = [...t.files]; t.value = ''; scanReceipt(fs); }
+  if (t.id === 'storeSel'){ S.storeId = t.value; localStorage.setItem('storeId', S.storeId); render(); }
+});
+
+function openEdit(id){
+  const i = byId(id); if (!i) return;
+  openSheet(`<h2>${esc(i.name)}</h2>
+    <label>Name<input id="f_name" value="${esc(i.name)}"></label>
+    <label>Category<select id="f_cat" data-cat>${catOpts(i.cat)}</select></label>
+    ${i.onList ? `<div class="two"><label>Quantity<input id="f_qty" value="${esc(i.qty||'')}" placeholder="2x"></label>
+      <label>Note<input id="f_note" value="${esc(i.note||'')}" placeholder="the low-salt one"></label></div>` : ''}
+    <label>Price at ${esc(curStore()?.name || 'this store')}<input id="f_price" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" value="${i.price?.[curStore()?.id] ?? ''}"></label>
+    <h3>Photo</h3>
+    <div id="photoBox" class="photo">${i.hasPhoto ? '<p class="note">Loading…</p>' : ''}</div>
+    <div class="btns" style="margin-top:8px"><button class="btn sm" data-a="pickPhoto">${i.hasPhoto ? 'Replace photo' : 'Add photo'}</button>
+      ${i.hasPhoto ? `<button class="btn sm danger" data-a="rmPhoto" data-id="${id}">Remove photo</button>` : ''}</div>
+    <input type="file" id="f_photo" accept="image/*" hidden>
+    ${i.misc ? `<label class="cb"><input type="checkbox" id="f_save"> Also save to my items</label>` : ''}
+    <div class="btns">
+      <button class="btn pri" data-a="saveEdit" data-id="${id}">Save</button>
+      ${i.onList ? `<button class="btn" data-a="offList" data-id="${id}">Remove from list</button>` : `<button class="btn" data-a="onList" data-id="${id}">Add to list</button>`}
+      <button class="btn danger" data-a="delItem" data-id="${id}">Delete</button>
+    </div>`);
+  loadPhoto(id);
+}
+async function loadPhoto(id){
+  S.editId = id;
+  const i = byId(id); if (!i?.hasPhoto) return;
+  try {
+    const d = await getDoc(doc(db, 'photos', id));
+    if (d.exists() && $('#photoBox')) $('#photoBox').innerHTML = `<img alt="${esc(i.name)}" src="${d.data().data}">`;
+    else if ($('#photoBox')) $('#photoBox').innerHTML = '';
+  } catch (e){ if ($('#photoBox')) $('#photoBox').innerHTML = '<p class="note">Photo isn\'t available offline yet.</p>'; }
+}
+function resizeImg(file, max = 900, q = .72){
+  return new Promise((res, rej) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const r = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', q));
+    };
+    img.onerror = rej; img.src = url;
+  });
+}
+async function savePhoto(id, file){
+  try {
+    const data = await resizeImg(file);
+    if (data.length > 900000){ toast('That photo is too big. Try a smaller one.'); return; }
+    const b = writeBatch(db);
+    b.set(doc(db, 'photos', id), { data, updated: serverTimestamp() });
+    b.update(iref(id), { hasPhoto: true });
+    await b.commit();
+    if ($('#photoBox')) $('#photoBox').innerHTML = `<img alt="" src="${data}">`;
+    toast('Photo saved');
+  } catch (e){ toast('Could not save the photo'); }
+}
+function openPhoto(id){
+  const i = byId(id); if (!i) return;
+  openSheet(`<h2>${esc(i.name)}</h2><div id="photoBox" class="photo"><p class="note">Loading…</p></div>
+    <div class="btns"><button class="btn pri" data-a="closeSheet">Close</button><button class="btn" data-a="editFromPhoto" data-id="${id}">Details</button></div>`);
+  loadPhoto(id);
+}
+function openNew(name = ''){
+  openSheet(`<h2>New item</h2>
+    <label>Name<input id="n_name" value="${esc(name)}"></label>
+    <label>Category<select id="n_cat" data-cat>${catOpts('Pantry')}</select></label>
+    <label class="cb"><input type="checkbox" id="n_list" checked> Put it on the list now</label>
+    <div class="btns"><button class="btn pri" data-a="saveNew">Save item</button><button class="btn" data-a="closeSheet">Cancel</button></div>`);
+  setTimeout(() => $('#n_name')?.focus(), 50);
+}
+
+/* ---------- finish / clear ---------- */
+async function finishShop(){
+  const done = S.items.filter(i => i.onList && i.ticked), left = S.items.filter(i => i.onList && !i.ticked).length;
+  if (!done.length){ toast('Tick some items first'); return; }
+  if (!confirm(`Finish shop?\n${done.length} ticked item${done.length===1?'':'s'} come off the list${left ? `, ${left} stay on it` : ''}.`)) return;
+  const b = writeBatch(db);
+  done.forEach(i => i.misc ? b.delete(iref(i.id))
+    : b.update(iref(i.id), { onList:false, ticked:false, qty:'', note:'', count:increment(1), last:serverTimestamp() }));
+  await b.commit(); toast('Shop finished');
+}
+async function clearAll(){
+  const all = S.items.filter(i => i.onList);
+  if (!confirm(`Clear all ${all.length} items from the list?`)) return;
+  const b = writeBatch(db);
+  all.forEach(i => i.misc ? b.delete(iref(i.id)) : b.update(iref(i.id), { onList:false, ticked:false, qty:'', note:'' }));
+  await b.commit(); toast('List cleared');
+}
+
+/* ---------- duplicates ---------- */
+function findClusters(){
+  const its = S.items.filter(i => !i.misc), keys = its.map(i => key(i.name)), par = its.map((_, i) => i);
+  const f = x => par[x] === x ? x : (par[x] = f(par[x]));
+  for (let a = 0; a < its.length; a++) for (let c = a + 1; c < its.length; c++){
+    const ka = keys[a], kc = keys[c];
+    const close = ka === kc || (ka.length >= 5 && kc.length >= 5 && lev(ka, kc) <= (ka.length >= 9 ? 2 : 1));
+    if (close) par[f(a)] = f(c);
+  }
+  const g = {};
+  its.forEach((it, i) => (g[f(i)] = g[f(i)] || []).push(it));
+  return Object.values(g).filter(x => x.length > 1)
+    .map(x => x.sort((p, q) => (q.count||0) - (p.count||0) || byName(p, q)))
+    .sort((a, b) => byName(a[0], b[0]));
+}
+function openDupes(){
+  const cl = findClusters();
+  if (!cl.length){ openSheet(`<h2>Tidy duplicates</h2><p class="note">No likely duplicates found.</p><div class="btns"><button class="btn" data-a="closeSheet">Close</button></div>`); return; }
+  openSheet(`<h2>Tidy duplicates</h2>
+    <p class="note">${cl.length} group${cl.length===1?'':'s'} of similar items. Pick the one to keep. The others merge into it and their purchase counts add up. Skip anything that isn't really a duplicate.</p>
+    ${cl.map((g, n) => `<div class="cluster" data-c="${n}">
+      ${g.map((i, k) => `<label class="cb"><input type="radio" name="k${n}" value="${i.id}" ${k===0?'checked':''}> ${esc(i.name)} <span class="pill plain">${esc(i.cat||'Other')}</span>${i.count?`<span class="state">${i.count}×</span>`:''}</label>`).join('')}
+      <div class="btns" style="margin-top:8px"><button class="btn sm pri" data-a="merge">Merge</button><button class="btn sm" data-a="skipCluster">Not duplicates</button></div></div>`).join('')}
+    <div class="btns"><button class="btn" data-a="closeSheet">Done</button></div>`);
+}
+async function merge(card){
+  const ids = [...card.querySelectorAll('input[type=radio]')].map(r => r.value);
+  const keepId = card.querySelector('input:checked').value;
+  const keep = byId(keepId), others = ids.filter(x => x !== keepId).map(byId).filter(Boolean);
+  const upd = { count: (keep.count||0) + others.reduce((s, o) => s + (o.count||0), 0) };
+  const onOthers = others.filter(o => o.onList);
+  if (!keep.onList && onOthers.length){ upd.onList = true; upd.ticked = onOthers.every(o => o.ticked); }
+  S.stores.forEach(s => { if (keep.pos?.[s.id] == null){ const o = others.find(o => o.pos?.[s.id] != null); if (o) upd[`pos.${s.id}`] = o.pos[s.id]; } });
+  const b = writeBatch(db);
+  S.stores.forEach(s => { if (keep.price?.[s.id] == null){ const o = others.find(o => o.price?.[s.id] != null); if (o) upd[`price.${s.id}`] = o.price[s.id]; } });
+  const donor = !keep.hasPhoto && others.find(o => o.hasPhoto);
+  if (donor){ try { const d = await getDoc(doc(db, 'photos', donor.id)); if (d.exists()){ b.set(doc(db, 'photos', keepId), d.data()); upd.hasPhoto = true; } } catch (e){} }
+  b.update(iref(keepId), upd);
+  others.forEach(o => { b.delete(iref(o.id)); if (o.hasPhoto) b.delete(doc(db, 'photos', o.id)); });
+  await b.commit(); card.remove(); toast(`Merged into ${keep.name}`);
+}
+
+/* ---------- import / export ---------- */
+function openImport(){
+  openSheet(`<h2>Import items</h2>
+    <p class="note">One item per line. Add a category after a comma if you like: <em>Oat milk, Dairy & Eggs</em>. You can paste straight from a spreadsheet.</p>
+    <label>Items<textarea id="imp"></textarea></label>
+    <label>Default category<select id="imp_cat" data-cat>${catOpts('Pantry')}</select></label>
+    <label class="cb"><input type="checkbox" id="imp_skip" checked> Skip items I already have</label>
+    <div class="btns"><button class="btn pri" data-a="doImport">Import</button><button class="btn" data-a="closeSheet">Cancel</button></div>`);
+}
+async function doImport(){
+  const def = $('#imp_cat').value, skip = $('#imp_skip').checked;
+  const have = new Set(S.items.filter(i => !i.misc).map(i => key(i.name))), seen = new Set(), rows = [], newCats = new Set();
+  for (const line of $('#imp').value.split(/\r?\n/)){
+    const parts = line.split(/[\t,;]/).map(s => s.trim());
+    const name = parts[0]; if (!name) continue;
+    let cat = parts[1] ? (S.cats.find(c => c.toLowerCase() === parts[1].toLowerCase()) || parts[1]) : def;
+    if (!S.cats.includes(cat)) newCats.add(cat);
+    const k = key(name);
+    if (seen.has(k) || (skip && have.has(k))) continue;
+    seen.add(k); rows.push({ name, cat });
+  }
+  if (!rows.length){ toast('Nothing new to import'); return; }
+  if (newCats.size) await updateDoc(doc(db,'meta','settings'), { cats: arrayUnion(...newCats) });
+  for (let n = 0; n < rows.length; n += 400){
+    const b = writeBatch(db);
+    rows.slice(n, n + 400).forEach(r => b.set(doc(collection(db,'items')), { ...r, misc:false, onList:false, ticked:false, qty:'', note:'', count:0, pos:{}, created:serverTimestamp() }));
+    await b.commit();
+  }
+  closeSheet(); toast(`Imported ${rows.length} items. Try Tidy duplicates next.`);
+}
+function exportCsv(){
+  const q = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
+  const csv = ['name,category,times_bought', ...S.items.filter(i => !i.misc).sort(byName).map(i => [q(i.name), q(i.cat), i.count||0].join(','))].join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'})); a.download = 'shop-items.csv'; a.click();
+}
+
+/* ---------- receipt prices ---------- */
+const CLAUDE_MODEL = 'claude-sonnet-5';
+const RECEIPT_PROMPT = names => `Here is a supermarket receipt. List every product line, one per line, in exactly this format and nothing else:
+receipt text | plain product name | unit price | quantity
+
+Rules:
+- Receipt text: exactly as printed on the receipt.
+- Plain product name: how I'd write it on a shopping list. If the product matches one of my items below, use my exact wording.
+- Unit price: price per item in dollars, no $ sign. For weighed items (e.g. 0.532kg @ $9.99/kg) give the price actually charged and quantity 1.
+- Ignore totals, GST, bags, discounts, loyalty and payment lines.
+- Put the whole answer in one code block.
+
+My items: ${names.join('; ')}`;
+
+function openReceipt(){
+  const st = curStore(); if (!st) return;
+  openSheet(`<h2>Update prices</h2>
+    <p class="note">Prices are saved for <b>${esc(st.name)}</b>. Change the store at the top first if this receipt is from somewhere else.</p>
+    <div class="btns" style="margin-top:8px"><button class="btn tag" data-a="scanPick" id="scanBtn">Scan receipt photo</button></div>
+    <p class="note" id="rcStatus">${localStorage.getItem('anthropicKey') ? 'Uses your API key saved on this phone. For a long receipt, select two or more photos.' : "Needs an Anthropic API key. You will be asked for it once per phone."}</p>
+    <input type="file" id="rc_file" accept="image/*" multiple hidden>
+    <h3>Or use the Claude app (free)</h3>
+    <ol class="note" style="padding-left:20px;margin:6px 0"><li>Tap Copy prompt.</li><li>In the Claude app, paste it and attach a photo of the receipt.</li><li>Paste Claude's answer below.</li></ol>
+    <div class="btns" style="margin-top:8px"><button class="btn sm" data-a="copyPrompt">Copy prompt</button></div>
+    <label>Claude's answer<textarea id="rc" placeholder="PS FRSH MLK 2L | Milk | 4.20 | 1"></textarea></label>
+    <div class="btns"><button class="btn pri" data-a="rcMatch">Match items</button><button class="btn" data-a="closeSheet">Cancel</button></div>`);
+}
+async function scanReceipt(files){
+  let key = localStorage.getItem('anthropicKey');
+  if (!key){
+    key = (prompt('Paste your Anthropic API key. It is stored on this phone only.') || '').trim();
+    if (!key) return;
+    localStorage.setItem('anthropicKey', key);
+  }
+  const status = m => { if ($('#rcStatus')) $('#rcStatus').textContent = m; }, btn = $('#scanBtn');
+  if (btn) btn.disabled = true;
+  status('Reading the receipt. This takes a few seconds…');
+  try {
+    const imgs = [];
+    for (const f of files.slice(0, 4)) imgs.push((await resizeImg(f, 1800, .85)).split(',')[1]);
+    const names = S.items.filter(i => !i.misc).map(i => i.name).sort((a, b) => a.localeCompare(b));
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL, max_tokens: 4000,
+        messages: [{ role: 'user', content: [
+          ...imgs.map(data => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } })),
+          { type: 'text', text: RECEIPT_PROMPT(names) }
+        ] }]
+      })
+    });
+    const j = await r.json();
+    if (!r.ok){
+      if (r.status === 401) localStorage.removeItem('anthropicKey');
+      throw new Error(r.status === 401 ? 'That API key was rejected. Try again with a new one.' : (j.error?.message || `Error ${r.status}`));
+    }
+    const text = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
+    $('#rc').value = text;
+    reviewReceipt();
+  } catch (e){
+    status(`Couldn't read the receipt: ${e.message}`);
+    if (btn) btn.disabled = false;
+  }
+}
+function parseReceipt(txt){
+  const out = [];
+  for (let line of txt.split(/\r?\n/)){
+    line = line.trim();
+    if (!line || line.startsWith('```') || /^\|?[\s:|-]+\|?$/.test(line)) continue;
+    const parts = line.split(/\||\t/).map(x => x.trim());
+    if (parts[0] === '') parts.shift();
+    if (parts.length && parts[parts.length - 1] === '') parts.pop();
+    if (parts.length < 3) continue;
+    const price = parseFloat(parts[2].replace(/[^0-9.]/g, ''));
+    if (isNaN(price)) continue;
+    out.push({ raw: parts[0], name: parts[1] || parts[0], price });
+  }
+  return out;
+}
+function cands(r, n = 5){
+  const q = norm(r.name), qt = new Set(q.split(' ')), arr = [];
+  const al = S.aliases[key(r.raw)], ai = al && byId(al);
+  if (ai) arr.push({ i: ai, sc: 2 });
+  for (const i of S.items){
+    if (i.misc || i === ai) continue;
+    const nn = norm(i.name); let sc = 0;
+    if (nn === q) sc = 1;
+    else {
+      const t = nn.split(' '), inter = t.filter(w => qt.has(w)).length;
+      sc = inter / new Set([...t, ...qt]).size;
+      if (nn.includes(q) || q.includes(nn)) sc = Math.max(sc, .6);
+      if (q.length >= 4 && lev(nn, q) <= 2) sc = Math.max(sc, .7);
+    }
+    if (sc > 0) arr.push({ i, sc });
+  }
+  return arr.sort((a, b) => b.sc - a.sc || byName(a.i, b.i)).slice(0, n);
+}
+function reviewReceipt(){
+  const rows = parseReceipt($('#rc').value);
+  if (!rows.length){ toast('No price lines found. Check the format.'); return; }
+  const st = curStore();
+  S.rc = rows.map(r => ({ ...r, c: cands(r) }));
+  openSheet(`<h2>Check the matches</h2>
+    <p class="note">${rows.length} lines for ${esc(st.name)}. Change any match, or set it to Skip.</p>
+    ${S.rc.map((r, n) => {
+      const top = r.c[0], pick = top && top.sc >= .6 ? top.i.id : '';
+      return `<div class="cluster" data-r="${n}">
+        <div class="note" style="margin:0">${esc(r.raw)}</div>
+        <div class="mini" style="border:0;padding-bottom:0">
+          <select class="rsel">
+            <option value="">Skip</option>
+            ${r.c.map(x => `<option value="${x.i.id}" ${x.i.id === pick ? 'selected' : ''}>${esc(x.i.name)}${x.i.price?.[st.id] != null ? ` (was $${x.i.price[st.id].toFixed(2)})` : ''}</option>`).join('')}
+            <option value="__new">Add “${esc(r.name)}” as new item</option>
+          </select>
+          <input class="rprice" type="number" step="0.01" min="0" inputmode="decimal" value="${r.price.toFixed(2)}" style="flex:none;width:86px" aria-label="Price">
+        </div></div>`;
+    }).join('')}
+    <div class="btns"><button class="btn pri" data-a="rcApply">Save prices</button><button class="btn" data-a="receipt">Back</button></div>`);
+}
+async function applyReceipt(){
+  const st = curStore(), b = writeBatch(db), map = {}; let n = 0;
+  document.querySelectorAll('[data-r]').forEach(card => {
+    const r = S.rc[+card.dataset.r], v = card.querySelector('.rsel').value, p = parseFloat(card.querySelector('.rprice').value);
+    if (!v || isNaN(p)) return;
+    let id = v;
+    if (v === '__new'){
+      const ref = doc(collection(db, 'items')); id = ref.id;
+      b.set(ref, { name:r.name, cat:'Other', misc:false, onList:false, ticked:false, qty:'', note:'', count:0, pos:{}, price:{ [st.id]: p }, created:serverTimestamp() });
+    } else b.update(iref(id), { [`price.${st.id}`]: p });
+    const k = key(r.raw); if (k) map[k] = id;
+    n++;
+  });
+  if (!n){ toast('Nothing to save'); return; }
+  if (Object.keys(map).length) b.set(doc(db, 'meta', 'aliases'), { map }, { merge:true });
+  await b.commit(); closeSheet(); toast(`Updated ${n} price${n===1?'':'s'} for ${st.name}`);
+}
+
+/* ---------- settings ---------- */
+function openSettings(view = 'main'){
+  S.liveSheet = () => openSettings(view);
+  const st = S.stores;
+  if (view.startsWith('order:')){
+    const s = st.find(x => x.id === view.slice(6)); if (!s){ openSettings('main'); return; }
+    const cats = orderedCats(s);
+    openSheet(`<h2>Aisle order: ${esc(s.name)}</h2><p class="note">Categories in the order you walk past them. New items land in their category's spot, and you can fine-tune by dragging on the list.</p>
+      ${cats.map((c, i) => `<div class="mini"><span class="grow">${esc(c)}</span>
+        <button class="btn sm" data-a="catMove" data-s="${s.id}" data-i="${i}" data-d="-1" ${i===0?'disabled':''}>↑</button>
+        <button class="btn sm" data-a="catMove" data-s="${s.id}" data-i="${i}" data-d="1" ${i===cats.length-1?'disabled':''}>↓</button></div>`).join('')}
+      <div class="btns"><button class="btn" data-a="settings">Back</button></div>`);
+    return;
+  }
+  openSheet(`<h2>Settings</h2>
+    <h3>Stores</h3>
+    ${st.map(s => `<div class="mini"><input value="${esc(s.name)}" data-a-change="renameStore" data-id="${s.id}" aria-label="Store name">
+      <button class="btn sm" data-a="orderView" data-id="${s.id}">Aisles</button>
+      ${st.length > 1 ? `<button class="btn sm danger" data-a="delStore" data-id="${s.id}">✕</button>` : ''}</div>`).join('')}
+    <div class="mini"><input id="newStore" placeholder="Add a store"><button class="btn sm pri" data-a="addStore">Add</button></div>
+    <label class="cb"><input type="checkbox" id="copyOrder" checked> Copy the current store's item order</label>
+    <h3>Categories</h3>
+    ${S.cats.map(c => `<div class="mini"><span class="grow">${esc(c)}</span>
+      <button class="btn sm" data-a="renCat" data-c="${esc(c)}">Rename</button>
+      ${c !== 'Other' ? `<button class="btn sm danger" data-a="delCat" data-c="${esc(c)}">✕</button>` : ''}</div>`).join('')}
+    <div class="mini"><input id="newCat" placeholder="Add a category"><button class="btn sm pri" data-a="addCat">Add</button></div>
+    <h3>Receipt scanning</h3>
+    <p class="note">${localStorage.getItem('anthropicKey') ? 'An API key is saved on this phone.' : 'No API key on this phone.'} Use a key with a low monthly spend limit.</p>
+    <div class="btns" style="margin-top:6px"><button class="btn sm" data-a="setKey">${localStorage.getItem('anthropicKey') ? 'Replace key' : 'Add key'}</button>
+      ${localStorage.getItem('anthropicKey') ? '<button class="btn sm danger" data-a="rmKey">Remove key</button>' : ''}</div>
+    <h3>Account</h3><p class="note">${esc(S.user?.email || '')}</p>
+    <div class="btns"><button class="btn" data-a="signout">Sign out</button><button class="btn pri" data-a="closeSheet">Done</button></div>`);
+}
+
+/* ---------- actions ---------- */
+const A = {
+  tab: t => { S.tab = t.dataset.tab; render(); },
+  sort: t => { S.sort = t.dataset.s; localStorage.setItem('sort', S.sort); render(); },
+  tick: async t => { const i = byId(t.closest('[data-id]').dataset.id); if (i) await updateDoc(iref(i.id), { ticked: !i.ticked }); },
+  edit: t => openEdit(t.closest('[data-id]').dataset.id),
+  quick: t => addToList(byId(t.dataset.id)),
+  sugAdd: t => { addToList(byId(t.dataset.id)); clearAdd(); },
+  addMisc: () => addMisc($('#add').value.trim()),
+  addNew: () => { const n = $('#add').value.trim(); clearAdd(); openNew(n); },
+  toggleList: async t => { const i = byId(t.closest('[data-id]').dataset.id);
+    await updateDoc(iref(i.id), i.onList ? { onList:false, ticked:false, qty:'', note:'' } : { onList:true, ticked:false }); },
+  finish: finishShop, clearAll,
+  newItem: () => openNew(''), dupes: openDupes, importer: openImport, export: exportCsv, doImport,
+  closeSheet,
+  scanPick: () => $('#rc_file').click(),
+  setKey: () => { const k = (prompt('Paste your Anthropic API key. It is stored on this phone only.') || '').trim(); if (k){ localStorage.setItem('anthropicKey', k); toast('Key saved'); openSettings('main'); } },
+  rmKey: () => { localStorage.removeItem('anthropicKey'); toast('Key removed'); openSettings('main'); },
+  receipt: openReceipt, rcMatch: reviewReceipt, rcApply: applyReceipt,
+  copyPrompt: async () => {
+    const names = S.items.filter(i => !i.misc).map(i => i.name).sort((a, b) => a.localeCompare(b));
+    try { await navigator.clipboard.writeText(RECEIPT_PROMPT(names)); toast('Prompt copied. Now open the Claude app.'); }
+    catch (e){ toast('Could not copy. Try again.'); }
+  },
+  photo: t => openPhoto(t.closest('[data-id]').dataset.id),
+  editFromPhoto: t => openEdit(t.dataset.id),
+  pickPhoto: () => $('#f_photo').click(),
+  rmPhoto: async t => {
+    const b = writeBatch(db); b.delete(doc(db, 'photos', t.dataset.id)); b.update(iref(t.dataset.id), { hasPhoto:false });
+    await b.commit(); if ($('#photoBox')) $('#photoBox').innerHTML = ''; toast('Photo removed');
+  },
+  settings: () => openSettings('main'),
+  orderView: t => openSettings('order:' + t.dataset.id),
+  signout: () => { closeSheet(); signOut(auth); },
+  saveEdit: async t => {
+    const id = t.dataset.id, i = byId(id), upd = { name: $('#f_name').value.trim() || i.name, cat: $('#f_cat').value };
+    if ($('#f_qty')) { upd.qty = $('#f_qty').value.trim(); upd.note = $('#f_note').value.trim(); }
+    if ($('#f_save')?.checked) upd.misc = false;
+    const pv = parseFloat($('#f_price').value), st = curStore();
+    if (st) upd[`price.${st.id}`] = isNaN(pv) ? deleteField() : Math.max(0, pv);
+    await updateDoc(iref(id), upd); closeSheet();
+  },
+  offList: async t => { await updateDoc(iref(t.dataset.id), { onList:false, ticked:false, qty:'', note:'' }); closeSheet(); },
+  onList: async t => { await updateDoc(iref(t.dataset.id), { onList:true, ticked:false }); closeSheet(); },
+  delItem: async t => { const i = byId(t.dataset.id); if (confirm(`Delete “${i.name}” for good?`)){ await deleteDoc(iref(i.id)); if (i.hasPhoto) deleteDoc(doc(db, 'photos', i.id)); closeSheet(); } },
+  saveNew: async () => {
+    const name = $('#n_name').value.trim(); if (!name) return;
+    const dupe = S.items.find(i => !i.misc && key(i.name) === key(name));
+    if (dupe){ if ($('#n_list').checked) await addToList(dupe); else toast(`You already have “${dupe.name}”`); closeSheet(); return; }
+    await addDoc(collection(db,'items'), { name, cat:$('#n_cat').value, misc:false, onList:$('#n_list').checked, ticked:false, qty:'', note:'', count:0, pos:{}, created:serverTimestamp() });
+    closeSheet(); toast(`Saved ${name}`);
+  },
+  merge: t => merge(t.closest('.cluster')),
+  skipCluster: t => t.closest('.cluster').remove(),
+  addCat: async () => { const n = $('#newCat').value.trim(); if (n && !S.cats.includes(n)) await updateDoc(doc(db,'meta','settings'), { cats: arrayUnion(n) }); },
+  renCat: async t => {
+    const old = t.dataset.c, n = (prompt('Rename category', old) || '').trim(); if (!n || n === old || S.cats.includes(n)) return;
+    const b = writeBatch(db);
+    b.update(doc(db,'meta','settings'), { cats: S.cats.map(c => c === old ? n : c) });
+    S.items.filter(i => i.cat === old).forEach(i => b.update(iref(i.id), { cat:n }));
+    S.stores.forEach(s => b.update(doc(db,'stores',s.id), { catOrder: orderedCats(s).map(c => c === old ? n : c) }));
+    await b.commit();
+  },
+  delCat: async t => {
+    const c = t.dataset.c, n = S.items.filter(i => i.cat === c).length;
+    if (!confirm(`Delete “${c}”?${n ? ` ${n} item${n===1?'':'s'} will move to Other.` : ''}`)) return;
+    const b = writeBatch(db);
+    S.items.filter(i => i.cat === c).forEach(i => b.update(iref(i.id), { cat:'Other' }));
+    b.update(doc(db,'meta','settings'), { cats: arrayRemove(c) });
+    await b.commit();
+  },
+  addStore: async () => {
+    const n = $('#newStore').value.trim(); if (!n) return;
+    const cur = curStore(), ref = doc(collection(db,'stores')), b = writeBatch(db);
+    b.set(ref, { name:n, catOrder: orderedCats(cur) });
+    if ($('#copyOrder').checked && cur) S.items.forEach(i => { if (i.pos?.[cur.id] != null) b.update(iref(i.id), { [`pos.${ref.id}`]: i.pos[cur.id] }); });
+    await b.commit(); S.storeId = ref.id; localStorage.setItem('storeId', ref.id); toast(`Added ${n}`);
+  },
+  delStore: async t => {
+    const s = S.stores.find(x => x.id === t.dataset.id);
+    if (confirm(`Delete the store “${s.name}”? Your items stay.`)) await deleteDoc(doc(db,'stores',s.id));
+  },
+  catMove: async t => {
+    const s = S.stores.find(x => x.id === t.dataset.s), o = orderedCats(s), i = +t.dataset.i, j = i + +t.dataset.d;
+    [o[i], o[j]] = [o[j], o[i]]; await updateDoc(doc(db,'stores',s.id), { catOrder:o });
+  }
+};
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-a]'); if (!t) return;
+  const f = A[t.dataset.a]; if (f) f(t, e);
+});
+document.addEventListener('change', e => {
+  if (e.target.dataset.aChange === 'renameStore'){
+    const v = e.target.value.trim(); if (v) updateDoc(doc(db,'stores',e.target.dataset.id), { name:v });
+  }
+});
+
+/* ---------- drag to reorder (shop order) ---------- */
+document.addEventListener('pointerdown', e => {
+  const g = e.target.closest('[data-grip]'); if (!g || S.sort !== 'shop') return;
+  const rowEl = g.closest('.row'), ul = rowEl.parentElement, st = curStore(), pos = posFn(st);
+  e.preventDefault(); S.dragging = true; rowEl.classList.add('drag');
+  let lastY = e.clientY, raf;
+  const place = () => {
+    const sibs = [...ul.querySelectorAll('.row:not(.drag)')]; let before = null;
+    for (const s of sibs){ const r = s.getBoundingClientRect(); if (lastY < r.top + r.height / 2){ before = s; break; } }
+    ul.insertBefore(rowEl, before);
+  };
+  const scroll = () => {
+    if (lastY < 130) window.scrollBy(0, -12); else if (lastY > innerHeight - 90) window.scrollBy(0, 12);
+    place(); raf = requestAnimationFrame(scroll);
+  };
+  raf = requestAnimationFrame(scroll);
+  const move = ev => { lastY = ev.clientY; ev.preventDefault(); };
+  const up = async () => {
+    cancelAnimationFrame(raf);
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+    rowEl.classList.remove('drag');
+    const rows = [...ul.querySelectorAll('.row')], ids = rows.map(r => r.dataset.id), m = ids.indexOf(rowEl.dataset.id);
+    const ps = ids.map((id, k) => k === m ? null : pos(byId(id)));
+    const p = m > 0 ? ps[m-1] : null, n = m < ids.length - 1 ? ps[m+1] : null;
+    const w = writeBatch(db); let changed = true;
+    if (p == null && n == null) changed = false;
+    else if (p == null) w.update(iref(ids[m]), { [`pos.${st.id}`]: n - 1 });
+    else if (n == null) w.update(iref(ids[m]), { [`pos.${st.id}`]: p + 1 });
+    else if (p < n) w.update(iref(ids[m]), { [`pos.${st.id}`]: (p + n) / 2 });
+    else {
+      let lo = m - 1, hi = m + 1;
+      while (lo > 0 && ps[lo-1] === p) lo--;
+      while (hi < ids.length - 1 && ps[hi+1] === p) hi++;
+      for (let k = lo; k <= hi; k++) w.update(iref(ids[k]), { [`pos.${st.id}`]: p + (k - lo) * 0.001 });
+    }
+    S.dragging = false;
+    if (changed) { try { await w.commit(); } catch (err){ toast('Could not save the new order'); } }
+    S.pending = false; render();
+  };
+  window.addEventListener('pointermove', move, { passive:false });
+  window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+});
+</script>
+</body>
+</html>
