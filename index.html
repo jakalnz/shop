@@ -636,7 +636,7 @@ async function merge(card){
 /* ---------- import / export ---------- */
 function openImport(){
   openSheet(`<h2>Import items</h2>
-    <p class="note">One item per line. Add a category after a comma if you like: <em>Oat milk, Dairy & Eggs</em>. You can paste straight from a spreadsheet.</p>
+    <p class="note">One item per line. Add a category and a note after commas if you like: <em>Oat milk, Dairy & Eggs, the barista one</em>. You can paste straight from a spreadsheet.</p>
     <label>Items<textarea id="imp"></textarea></label>
     <label>Default category<select id="imp_cat" data-cat>${catOpts('Pantry')}</select></label>
     <label class="cb"><input type="checkbox" id="imp_skip" checked> Skip items I already have</label>
@@ -652,20 +652,20 @@ async function doImport(){
     if (!S.cats.includes(cat)) newCats.add(cat);
     const k = key(name);
     if (seen.has(k) || (skip && have.has(k))) continue;
-    seen.add(k); rows.push({ name, cat });
+    seen.add(k); rows.push({ name, cat, note: parts.slice(2).join(', ') });
   }
   if (!rows.length){ toast('Nothing new to import'); return; }
   if (newCats.size) await updateDoc(doc(db,'meta','settings'), { cats: arrayUnion(...newCats) });
   for (let n = 0; n < rows.length; n += 400){
     const b = writeBatch(db);
-    rows.slice(n, n + 400).forEach(r => b.set(doc(collection(db,'items')), { ...r, misc:false, onList:false, ticked:false, qty:'', note:'', count:0, pos:{}, created:serverTimestamp() }));
+    rows.slice(n, n + 400).forEach(r => b.set(doc(collection(db,'items')), { ...r, misc:false, onList:false, ticked:false, qty:'', count:0, pos:{}, created:serverTimestamp() }));
     await b.commit();
   }
   closeSheet(); toast(`Imported ${rows.length} items. Try Tidy duplicates next.`);
 }
 function exportCsv(){
   const q = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
-  const csv = ['name,category,times_bought', ...S.items.filter(i => !i.misc).sort(byName).map(i => [q(i.name), q(i.cat), i.count||0].join(','))].join('\n');
+  const csv = ['name,category,note,times_bought', ...S.items.filter(i => !i.misc).sort(byName).map(i => [q(i.name), q(i.cat), q(i.note), i.count||0].join(','))].join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'})); a.download = 'shop-items.csv'; a.click();
 }
 
