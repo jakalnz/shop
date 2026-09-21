@@ -55,6 +55,9 @@ main{max-width:680px;margin:0 auto;padding:0 0 110px}
 .addrow{display:flex;gap:6px}.addrow input{flex:1;min-width:0}
 .ab{flex:none;width:48px;border:2px solid var(--ink);border-radius:6px;background:var(--row);font-size:20px;font-weight:800;line-height:1}
 .ab.on{background:var(--danger);border-color:var(--danger);color:#fff}
+.banner{margin:10px 14px 0;padding:8px 12px;border-left:5px solid var(--ok);background:var(--row);font-size:15px}
+.banner div+div{margin-top:4px}.banner button{margin-left:8px;text-decoration:underline;font-weight:600}
+#lk_q{width:100%;border:2px solid var(--ink);background:var(--row);border-radius:6px;padding:10px 12px;font-size:17px;margin-bottom:8px}
 .row.urgent{box-shadow:inset 5px 0 0 var(--danger)}
 .addbar input,.search input{width:100%;border:2px solid var(--ink);background:var(--row);border-radius:6px;padding:12px 14px;font-size:17px}
 .addbar input:focus,.search input:focus{outline:none;border-color:var(--tag);box-shadow:0 0 0 3px rgba(255,210,63,.45)}
@@ -196,11 +199,13 @@ textarea{min-height:170px}
 
   <main>
     <section id="vList">
+      <div id="shopBanner" class="banner" hidden></div>
       <div class="addbar">
         <div class="addrow">
           <input id="add" placeholder="Add an item" autocomplete="off" autocapitalize="sentences" enterkeyhint="done">
           <button class="ab" id="flagBtn" data-a="flagNext" aria-pressed="false" aria-label="Flag the next item as out">!</button>
           <button class="ab" id="micBtn" data-a="voice" aria-label="Add by voice" hidden>🎤</button>
+          <button class="ab" id="scanBtn" data-a="scan" aria-label="Scan a barcode" hidden>▥</button>
         </div>
         <div id="sug"></div>
       </div>
@@ -352,6 +357,11 @@ function subscribe(){
     S.trips = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => b.at - a.at);
     if (S.liveSheet) S.liveSheet();
   }, denied));
+  unsubs.push(onSnapshot(collection(db,'presence'), snap => {
+    S.presence = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
+    renderBanner();
+  }, denied));
+  unsubs.push(onSnapshot(doc(db,'meta','barcodes'), snap => { S.barcodes = snap.exists() ? (snap.data().map || {}) : {}; }, denied));
   unsubs.push(onSnapshot(doc(db,'meta','aliases'), snap => { S.aliases = snap.exists() ? (snap.data().map || {}) : {}; }, denied));
   unsubs.push(onSnapshot(doc(db,'meta','settings'), snap => {
     if (snap.exists()) S.cats = snap.data().cats || S.cats;
@@ -440,6 +450,7 @@ function renderList(){
       : `<div class="est"><span style="display:block">Add a price to an item's details to see an estimate for ${esc(st.name)}.</span></div>`;
   }
   $('#listBody').innerHTML = h;
+  renderBanner();
   $('#listActions').innerHTML = all.length
     ? `<button class="btn tag" data-a="finish">Finish shop</button><button class="btn" data-a="clearAll">Clear list</button>` : '';
 }
@@ -546,7 +557,7 @@ function openSheet(html){
   $('#sheet').innerHTML = `<div class="scrim" data-a="closeSheet"></div><div class="panel" role="dialog">${html}</div>`; $('#sheet').classList.add('on');
   if (top) $('#sheet .panel').scrollTop = top;
 }
-function closeSheet(){ S.liveSheet = null; $('#sheet').classList.remove('on'); $('#sheet').innerHTML = ''; }
+function closeSheet(){ S.liveSheet = null; if (S.stopScan) S.stopScan(); $('#sheet').classList.remove('on'); $('#sheet').innerHTML = ''; }
 const catOpts = sel => { const cs = S.cats.includes(sel) || !sel ? S.cats : [...S.cats, sel];
   return cs.map(c => `<option ${c === (sel || 'Other') ? 'selected' : ''}>${esc(c)}</option>`).join('') + `<option value="__new">+ New category…</option>`; };
 document.addEventListener('change', async e => {
@@ -641,6 +652,7 @@ async function finishShop(){
   const b = writeBatch(db), tid = saveTrip(b, 'finished', done);
   done.forEach(i => i.misc ? b.delete(iref(i.id))
     : b.update(iref(i.id), { ...offFields(), count:increment(1), last:serverTimestamp(), ...repeatFields(i) }));
+  if (S.user) b.delete(doc(db,'presence',S.user.uid));
   S.undo = { tid, items:snap(done), uncount:true };
   await b.commit(); toast('Shop finished', 'undo');
 }
@@ -651,6 +663,51 @@ async function clearAll(){
   all.forEach(i => i.misc ? b.delete(iref(i.id)) : b.update(iref(i.id), offFields()));
   S.undo = { tid, items:snap(all), uncount:false };
   await b.commit(); toast('List cleared', 'undo');
+}
+/* ---------- live shopping ---------- */
+const PRESENCE_MS = 10 * 60000, fresh = p => p && Date.now() - p.at < PRESENCE_MS;
+const beat = () => S.user ? setDoc(doc(db,'presence',S.user.uid), { name:me().name, store:curStore()?.name || '', at:Date.now() }).catch(() => {}) : null;
+function renderBanner(){
+  const el = $('#shopBanner'); if (!el || !S.user) return;
+  const mine = S.presence[S.user.uid], other = Object.entries(S.presence).find(([u, p]) => u !== S.user.uid && fresh(p))?.[1];
+  const all = S.items.filter(i => i.onList), tk = all.filter(i => i.ticked).length;
+  let h = '';
+  if (other) h += `<div><b>${esc(other.name)}</b> is shopping${other.store ? ' at ' + esc(other.store) : ''} · ${tk} of ${all.length} ticked</div>`;
+  if (fresh(mine)) h += `<div>You're shopping. Your ticks show live on the other phone.<button data-a="shopStop">Stop</button></div>`;
+  el.hidden = !h; el.innerHTML = h;
+}
+setInterval(() => { if (!document.hidden) renderBanner(); }, 60000);
+/* ---------- barcode scan ---------- */
+if ('BarcodeDetector' in window && navigator.mediaDevices?.getUserMedia) $('#scanBtn').hidden = false;
+async function scanBarcode(){
+  let stream, stop = false, timer;
+  const end = () => { stop = true; clearInterval(timer); stream?.getTracks().forEach(t => t.stop()); S.stopScan = null; };
+  openSheet(`<h2>Scan a barcode</h2><video id="scanVid" playsinline muted style="width:100%;border-radius:8px;background:#000"></video>
+    <p class="note" id="scanMsg">Point the camera at the barcode.</p><div class="btns"><button class="btn" data-a="closeSheet">Cancel</button></div>`);
+  S.liveSheet = null; S.stopScan = end;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+    if (stop){ stream.getTracks().forEach(t => t.stop()); return; }
+    const v = $('#scanVid'); v.srcObject = stream; await v.play();
+    const det = new BarcodeDetector({ formats:['ean_13','ean_8','upc_a','upc_e'] });
+    timer = setInterval(async () => {
+      if (stop) return;
+      try { const r = await det.detect(v); if (r[0]){ const code = r[0].rawValue; end(); onScanned(code); } } catch (e) {}
+    }, 350);
+  } catch (e){ if ($('#scanMsg')) $('#scanMsg').textContent = "Couldn't open the camera. Check the camera permission for this site."; }
+}
+function onScanned(code){
+  const id = S.barcodes[code], it = id && byId(id);
+  if (it){ closeSheet(); addToList(it); return; }
+  openSheet(`<h2>New barcode</h2><p class="note">Which of your items is this? It's remembered for next time.</p>
+    <input id="lk_q" placeholder="Search your items" autocomplete="off"><div id="lk_res"></div>
+    <div class="btns"><button class="btn" data-a="closeSheet">Cancel</button></div>`);
+  S.liveSheet = null;
+  $('#lk_q').addEventListener('input', () => {
+    const q = $('#lk_q').value.trim();
+    $('#lk_res').innerHTML = (q ? matches(q) : []).map(({i}) => `<div class="mini"><span class="grow">${esc(i.name)}</span><button class="btn sm pri" data-a="linkCode" data-id="${i.id}" data-code="${esc(code)}">This one</button></div>`).join('');
+  });
+  $('#lk_q').focus();
 }
 /* ---------- recurring items ---------- */
 const DAY = 864e5, lastMs = i => i.last?.toMillis?.() || 0;
@@ -950,10 +1007,13 @@ function openSettings(view = 'main'){
 const A = {
   tab: t => { S.tab = t.dataset.tab; render(); },
   sort: t => { S.sort = t.dataset.s; localStorage.setItem('sort', S.sort); render(); },
-  tick: async t => { const i = byId(t.closest('[data-id]').dataset.id); if (i) await updateDoc(iref(i.id), { ticked: !i.ticked, tickedBy: i.ticked ? deleteField() : me() }); },
+  tick: async t => { const i = byId(t.closest('[data-id]').dataset.id); if (i) await updateDoc(iref(i.id), { ticked: !i.ticked, tickedBy: i.ticked ? deleteField() : me() }); if (i && !i.ticked) beat(); },
   edit: t => openEdit(t.closest('[data-id]').dataset.id),
   quick: t => addToList(byId(t.dataset.id)),
   voice: listenForItems,
+  scan: scanBarcode,
+  linkCode: async t => { const id = t.dataset.id; await setDoc(doc(db,'meta','barcodes'), { map:{ [t.dataset.code]:id } }, { merge:true }); closeSheet(); addToList(byId(id)); },
+  shopStop: () => deleteDoc(doc(db,'presence',S.user.uid)),
   flagNext: () => { S.flagNext = !S.flagNext; syncFlagBtn(); if (S.flagNext) toast("Next item you add will be flagged as out"); },
   sugAdd: t => { addToList(byId(t.dataset.id)); clearAdd(); },
   addMisc: () => addMisc($('#add').value.trim()),
