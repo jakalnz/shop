@@ -497,8 +497,10 @@ async function addToList(i, quiet){
   if (i.onList){
     const u = {}; if (i.ticked){ u.ticked = false; u.tickedBy = deleteField(); } if (urg) u.urgent = true;
     if (Object.keys(u).length) await updateDoc(iref(i.id), u);
-    if (!quiet) toast(urg ? `${i.name} is flagged as out` : `${i.name} is already on the list`);
-  } else { await updateDoc(iref(i.id), onFields(urg)); if (!quiet) toast(`Added ${i.name}`); }
+    const res = i.ticked ? 'added' : urg ? 'flagged' : 'already';
+    if (!quiet) toast(res === 'added' ? `Added ${i.name}` : res === 'flagged' ? `${i.name} is flagged as out` : `${i.name} is already on the list`);
+    return res;
+  } else { await updateDoc(iref(i.id), onFields(urg)); if (!quiet) toast(`Added ${i.name}`); return 'added'; }
 }
 function syncFlagBtn(){ const b = $('#flagBtn'); if (b){ b.classList.toggle('on', S.flagNext); b.setAttribute('aria-pressed', S.flagNext); } }
 function clearAdd(){ $('#add').value = ''; renderSug(); renderUsual(); }
@@ -506,6 +508,7 @@ async function addMisc(name, quiet){
   const urg = S.flagNext; S.flagNext = false; syncFlagBtn();
   await addDoc(collection(db,'items'), { name, cat:'Other', misc:true, onList:true, ticked:false, urgent:urg, addedBy:me(), qty:'', note:'', count:0, pos:{}, created:serverTimestamp() });
   if (!quiet){ toast(`Added ${name}`); clearAdd(); }
+  return 'added';
 }
 $('#add').addEventListener('input', () => { renderSug(); renderUsual(); });
 $('#add').addEventListener('keydown', e => {
@@ -525,8 +528,16 @@ function listenForItems(){
   r.onresult = async e => {
     const words = e.results[0][0].transcript.split(/,|\band\b|\bthen\b/i).map(x => x.trim().replace(/^\W+|\W+$/g, '')).filter(Boolean)
       .map(x => x[0].toUpperCase() + x.slice(1));
-    for (const w of words){ const m = matches(w); if (m.length && m[0].sc <= 1) await addToList(m[0].i, true); else await addMisc(w, true); }
-    if (words.length) toast(`Added ${words.join(', ')}`); else toast("Didn't catch that");
+    const urg = S.flagNext, out = { added:[], flagged:[], already:[] };
+    for (const w of words){
+      S.flagNext = urg;
+      const m = matches(w), hit = m.length && m[0].sc <= 1;
+      out[hit ? await addToList(m[0].i, true) : await addMisc(w, true)].push(hit ? m[0].i.name : w);
+    }
+    S.flagNext = false; syncFlagBtn();
+    const parts = [out.added.length && `Added ${out.added.join(', ')}`, out.flagged.length && `Flagged ${out.flagged.join(', ')}`,
+      out.already.length && `Already on the list: ${out.already.join(', ')}`].filter(Boolean);
+    toast(parts.length ? parts.join('. ') : "Didn't catch that");
   };
   r.onerror = e => { if (e.error !== 'no-speech' && e.error !== 'aborted') toast("Couldn't use the microphone"); };
   r.onend = () => btn.classList.remove('on');
