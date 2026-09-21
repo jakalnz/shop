@@ -739,7 +739,7 @@ async function restoreItems(items, { keepTicks, uncount }){
   items.forEach(it => {
     const cur = byId(it.id), f = { onList:true, ticked: keepTicks && it.ticked, qty:it.qty, note:it.note, urgent:!!it.urgent, addedBy:it.addedBy || me(), tickedBy: keepTicks && it.ticked ? it.tickedBy : deleteField() };
     if (cur) b.update(iref(it.id), uncount && !it.misc ? { ...f, count:increment(-1), due:deleteField() } : f);
-    else b.set(iref(it.id), { ...f, name:it.name, cat:it.cat, misc:it.misc, count:0, pos:{}, created:serverTimestamp() });
+    else { const { tickedBy, ...nf } = f; b.set(iref(it.id), { ...nf, ...(keepTicks && it.ticked && it.tickedBy ? { tickedBy } : {}), name:it.name, cat:it.cat, misc:it.misc, count:0, pos:{}, created:serverTimestamp() }); }
   });
   await b.commit();
 }
