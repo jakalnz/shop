@@ -52,6 +52,10 @@ main{max-width:680px;margin:0 auto;padding:0 0 110px}
 
 /* add bar */
 .addbar{padding:12px 14px 4px;position:relative}
+.addrow{display:flex;gap:6px}.addrow input{flex:1;min-width:0}
+.ab{flex:none;width:48px;border:2px solid var(--ink);border-radius:6px;background:var(--row);font-size:20px;font-weight:800;line-height:1}
+.ab.on{background:var(--danger);border-color:var(--danger);color:#fff}
+.row.urgent{box-shadow:inset 5px 0 0 var(--danger)}
 .addbar input,.search input{width:100%;border:2px solid var(--ink);background:var(--row);border-radius:6px;padding:12px 14px;font-size:17px}
 .addbar input:focus,.search input:focus{outline:none;border-color:var(--tag);box-shadow:0 0 0 3px rgba(255,210,63,.45)}
 #sug{margin-top:6px;background:var(--row);border:1px solid var(--line);border-radius:6px;overflow:hidden}
@@ -61,6 +65,7 @@ main{max-width:680px;margin:0 auto;padding:0 0 110px}
 #sug button:hover{background:rgba(255,210,63,.18)}
 #sug .grow{flex:1}
 .pill{font-size:12px;background:var(--tag);color:var(--tag-ink);border-radius:3px;padding:1px 6px;font-weight:600;white-space:nowrap}
+.pill.urg{background:var(--danger);color:#fff}
 .pill.plain{background:transparent;color:var(--mute);border:1px solid var(--line)}
 .state{font-size:13px;color:var(--mute)}
 .newopt{font-weight:600}
@@ -191,7 +196,10 @@ textarea{min-height:170px}
   <main>
     <section id="vList">
       <div class="addbar">
-        <input id="add" placeholder="Add an item" autocomplete="off" autocapitalize="sentences" enterkeyhint="done">
+        <div class="addrow">
+          <input id="add" placeholder="Add an item" autocomplete="off" autocapitalize="sentences" enterkeyhint="done">
+          <button class="ab" id="flagBtn" data-a="flagNext" aria-pressed="false" aria-label="Flag the next item as out">!</button>
+        </div>
         <div id="sug"></div>
       </div>
       <details id="usual"></details>
@@ -279,12 +287,15 @@ function toast(m, act){
 
 /* ---------- state ---------- */
 const S = {
-  user:null, items:[], stores:[], trips:[], undo:null, aliases:{}, rc:[], cats:[...DEFAULT_CATS],
+  user:null, items:[], stores:[], trips:[], undo:null, flagNext:false, presence:{}, barcodes:{}, aliases:{}, rc:[], cats:[...DEFAULT_CATS],
   storeId: localStorage.getItem('storeId') || '',
   sort: localStorage.getItem('sort') || 'shop',
   tab:'list', dragging:false, pending:false, liveSheet:null
 };
 const byId = id => S.items.find(i => i.id === id);
+const me = () => ({ uid:S.user.uid, name:(S.user.displayName || S.user.email || '?').split(/[ @]/)[0] });
+const onFields = urgent => ({ onList:true, ticked:false, urgent:!!urgent, addedBy:me(), tickedBy:deleteField() });
+const offFields = () => ({ onList:false, ticked:false, qty:'', note:'', urgent:deleteField(), addedBy:deleteField(), tickedBy:deleteField() });
 const curStore = () => S.stores.find(s => s.id === S.storeId) || S.stores[0];
 const iref = id => doc(db, 'items', id);
 let app, auth, db, unsubs = [];
@@ -380,12 +391,14 @@ function row(i, o = {}){
     o.chip ? `<span class="pill plain">${esc(i.cat || 'Other')}</span>` : '',
     i.misc ? `<span class="pill plain">one-off</span>` : '',
     (curStore() && i.price?.[curStore().id] != null) ? `<span>$${i.price[curStore().id].toFixed(2)}</span>` : '',
-    i.hasPhoto ? `<button class="pill plain cam" data-a="photo" aria-label="Show photo">Photo</button>` : ''
+    i.hasPhoto ? `<button class="pill plain cam" data-a="photo" aria-label="Show photo">Photo</button>` : '',
+    (i.addedBy && i.addedBy.uid !== S.user?.uid) ? `<span>+ ${esc(i.addedBy.name)}</span>` : '',
+    (i.ticked && i.tickedBy && i.tickedBy.uid !== S.user?.uid) ? `<span>✓ ${esc(i.tickedBy.name)}</span>` : ''
   ].join('');
   const h = S.hues?.get(S.cats.includes(i.cat) ? i.cat : 'Other');
-  return `<li class="row ${i.ticked ? 'done' : ''}" data-id="${i.id}"${h != null && !i.ticked ? ` style="--h:${h}"` : ''}>
+  return `<li class="row ${i.ticked ? 'done' : ''} ${i.urgent && !i.ticked ? 'urgent' : ''}" data-id="${i.id}"${h != null && !i.ticked ? ` style="--h:${h}"` : ''}>
     <button class="chk" data-a="tick" aria-label="${i.ticked ? 'Untick' : 'Tick'} ${esc(i.name)}"><i>${tickSvg}</i></button>
-    <div class="txt" data-a="edit"><div class="nm">${esc(i.name)}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>
+    <div class="txt" data-a="edit"><div class="nm">${i.urgent && !i.ticked ? '<span class="pill urg">OUT</span> ' : ''}${esc(i.name)}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>
     ${o.grip ? `<span class="grip" data-grip aria-label="Drag to reorder">${gripSvg}</span>` : ''}
   </li>`;
 }
@@ -463,14 +476,20 @@ function renderSug(){
     <button class="newopt" data-a="addNew"><span class="grow">Add “${esc(q)}” to your items<small>Saved for every future shop</small></span></button>`;
   box.innerHTML = h;
 }
-async function addToList(i){
-  if (i.onList){ if (i.ticked) await updateDoc(iref(i.id), { ticked:false }); toast(`${i.name} is already on the list`); }
-  else { await updateDoc(iref(i.id), { onList:true, ticked:false }); toast(`Added ${i.name}`); }
+async function addToList(i, quiet){
+  const urg = S.flagNext; S.flagNext = false; syncFlagBtn();
+  if (i.onList){
+    const u = {}; if (i.ticked){ u.ticked = false; u.tickedBy = deleteField(); } if (urg) u.urgent = true;
+    if (Object.keys(u).length) await updateDoc(iref(i.id), u);
+    if (!quiet) toast(urg ? `${i.name} is flagged as out` : `${i.name} is already on the list`);
+  } else { await updateDoc(iref(i.id), onFields(urg)); if (!quiet) toast(`Added ${i.name}`); }
 }
+function syncFlagBtn(){ const b = $('#flagBtn'); if (b){ b.classList.toggle('on', S.flagNext); b.setAttribute('aria-pressed', S.flagNext); } }
 function clearAdd(){ $('#add').value = ''; renderSug(); renderUsual(); }
-async function addMisc(name){
-  await addDoc(collection(db,'items'), { name, cat:'Other', misc:true, onList:true, ticked:false, qty:'', note:'', count:0, pos:{}, created:serverTimestamp() });
-  toast(`Added ${name}`); clearAdd();
+async function addMisc(name, quiet){
+  const urg = S.flagNext; S.flagNext = false; syncFlagBtn();
+  await addDoc(collection(db,'items'), { name, cat:'Other', misc:true, onList:true, ticked:false, urgent:urg, addedBy:me(), qty:'', note:'', count:0, pos:{}, created:serverTimestamp() });
+  if (!quiet){ toast(`Added ${name}`); clearAdd(); }
 }
 $('#add').addEventListener('input', () => { renderSug(); renderUsual(); });
 $('#add').addEventListener('keydown', e => {
@@ -526,7 +545,8 @@ function openEdit(id){
     <label>Name<input id="f_name" value="${esc(i.name)}"></label>
     <label>Category<select id="f_cat" data-cat>${catOpts(i.cat)}</select></label>
     ${i.onList ? `<div class="two"><label>Quantity<input id="f_qty" value="${esc(i.qty||'')}" placeholder="2x"></label>
-      <label>Note<input id="f_note" value="${esc(i.note||'')}" placeholder="the low-salt one"></label></div>` : ''}
+      <label>Note<input id="f_note" value="${esc(i.note||'')}" placeholder="the low-salt one"></label></div>
+      <label class="cb"><input type="checkbox" id="f_urg" ${i.urgent ? 'checked' : ''}> We're out. Highlight it for the shopper</label>` : ''}
     <label>Price at ${esc(curStore()?.name || 'this store')}<input id="f_price" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" value="${i.price?.[curStore()?.id] ?? ''}"></label>
     <h3>Photo</h3>
     <div id="photoBox" class="photo">${i.hasPhoto ? '<p class="note">Loading…</p>' : ''}</div>
@@ -596,7 +616,7 @@ async function finishShop(){
   if (!confirm(`Finish shop?\n${done.length} ticked item${done.length===1?'':'s'} come off the list${left ? `, ${left} stay on it` : ''}.`)) return;
   const b = writeBatch(db), tid = saveTrip(b, 'finished', done);
   done.forEach(i => i.misc ? b.delete(iref(i.id))
-    : b.update(iref(i.id), { onList:false, ticked:false, qty:'', note:'', count:increment(1), last:serverTimestamp() }));
+    : b.update(iref(i.id), { ...offFields(), count:increment(1), last:serverTimestamp() }));
   S.undo = { tid, items:snap(done), uncount:true };
   await b.commit(); toast('Shop finished', 'undo');
 }
@@ -604,13 +624,13 @@ async function clearAll(){
   const all = S.items.filter(i => i.onList);
   if (!confirm(`Clear all ${all.length} items from the list?`)) return;
   const b = writeBatch(db), tid = saveTrip(b, 'cleared', all);
-  all.forEach(i => i.misc ? b.delete(iref(i.id)) : b.update(iref(i.id), { onList:false, ticked:false, qty:'', note:'' }));
+  all.forEach(i => i.misc ? b.delete(iref(i.id)) : b.update(iref(i.id), offFields()));
   S.undo = { tid, items:snap(all), uncount:false };
   await b.commit(); toast('List cleared', 'undo');
 }
 /* ---------- list history ---------- */
 const MAX_TRIPS = 20;
-const snap = its => its.map(i => ({ id:i.id, name:i.name, cat:i.cat || 'Other', qty:i.qty || '', note:i.note || '', ticked:!!i.ticked, misc:!!i.misc }));
+const snap = its => its.map(i => ({ id:i.id, name:i.name, cat:i.cat || 'Other', qty:i.qty || '', note:i.note || '', ticked:!!i.ticked, misc:!!i.misc, urgent:!!i.urgent, addedBy:i.addedBy || null, tickedBy:i.tickedBy || null }));
 function saveTrip(b, kind, its){
   const ref = doc(collection(db,'trips'));
   b.set(ref, { at:Date.now(), kind, store:curStore()?.name || '', items:snap(its) });
@@ -620,7 +640,7 @@ function saveTrip(b, kind, its){
 async function restoreItems(items, { keepTicks, uncount }){
   const b = writeBatch(db);
   items.forEach(it => {
-    const cur = byId(it.id), f = { onList:true, ticked: keepTicks && it.ticked, qty:it.qty, note:it.note };
+    const cur = byId(it.id), f = { onList:true, ticked: keepTicks && it.ticked, qty:it.qty, note:it.note, urgent:!!it.urgent, addedBy:it.addedBy || me(), tickedBy: keepTicks && it.ticked ? it.tickedBy : deleteField() };
     if (cur) b.update(iref(it.id), uncount && !it.misc ? { ...f, count:increment(-1) } : f);
     else b.set(iref(it.id), { ...f, name:it.name, cat:it.cat, misc:it.misc, count:0, pos:{}, created:serverTimestamp() });
   });
@@ -890,14 +910,15 @@ function openSettings(view = 'main'){
 const A = {
   tab: t => { S.tab = t.dataset.tab; render(); },
   sort: t => { S.sort = t.dataset.s; localStorage.setItem('sort', S.sort); render(); },
-  tick: async t => { const i = byId(t.closest('[data-id]').dataset.id); if (i) await updateDoc(iref(i.id), { ticked: !i.ticked }); },
+  tick: async t => { const i = byId(t.closest('[data-id]').dataset.id); if (i) await updateDoc(iref(i.id), { ticked: !i.ticked, tickedBy: i.ticked ? deleteField() : me() }); },
   edit: t => openEdit(t.closest('[data-id]').dataset.id),
   quick: t => addToList(byId(t.dataset.id)),
+  flagNext: () => { S.flagNext = !S.flagNext; syncFlagBtn(); if (S.flagNext) toast("Next item you add will be flagged as out"); },
   sugAdd: t => { addToList(byId(t.dataset.id)); clearAdd(); },
   addMisc: () => addMisc($('#add').value.trim()),
   addNew: () => { const n = $('#add').value.trim(); clearAdd(); openNew(n); },
   toggleList: async t => { const i = byId(t.closest('[data-id]').dataset.id);
-    await updateDoc(iref(i.id), i.onList ? { onList:false, ticked:false, qty:'', note:'' } : { onList:true, ticked:false }); },
+    await updateDoc(iref(i.id), i.onList ? offFields() : onFields()); },
   finish: finishShop, clearAll,
   newItem: () => openNew(''), dupes: openDupes, importer: openImport, export: exportCsv, doImport,
   closeSheet,
@@ -937,18 +958,19 @@ const A = {
     const id = t.dataset.id, i = byId(id), upd = { name: $('#f_name').value.trim() || i.name, cat: $('#f_cat').value };
     if ($('#f_qty')) { upd.qty = $('#f_qty').value.trim(); upd.note = $('#f_note').value.trim(); }
     if ($('#f_save')?.checked) upd.misc = false;
+    if ($('#f_urg')) upd.urgent = $('#f_urg').checked;
     const pv = parseFloat($('#f_price').value), st = curStore();
     if (st) upd[`price.${st.id}`] = isNaN(pv) ? deleteField() : Math.max(0, pv);
     await updateDoc(iref(id), upd); closeSheet();
   },
-  offList: async t => { await updateDoc(iref(t.dataset.id), { onList:false, ticked:false, qty:'', note:'' }); closeSheet(); },
-  onList: async t => { await updateDoc(iref(t.dataset.id), { onList:true, ticked:false }); closeSheet(); },
+  offList: async t => { await updateDoc(iref(t.dataset.id), offFields()); closeSheet(); },
+  onList: async t => { await updateDoc(iref(t.dataset.id), onFields()); closeSheet(); },
   delItem: async t => { const i = byId(t.dataset.id); if (confirm(`Delete “${i.name}” for good?`)){ await deleteDoc(iref(i.id)); if (i.hasPhoto) deleteDoc(doc(db, 'photos', i.id)); closeSheet(); } },
   saveNew: async () => {
     const name = $('#n_name').value.trim(); if (!name) return;
     const dupe = S.items.find(i => !i.misc && key(i.name) === key(name));
     if (dupe){ if ($('#n_list').checked) await addToList(dupe); else toast(`You already have “${dupe.name}”`); closeSheet(); return; }
-    await addDoc(collection(db,'items'), { name, cat:$('#n_cat').value, misc:false, onList:$('#n_list').checked, ticked:false, qty:'', note:'', count:0, pos:{}, created:serverTimestamp() });
+    await addDoc(collection(db,'items'), { name, cat:$('#n_cat').value, misc:false, onList:$('#n_list').checked, ticked:false, ...($('#n_list').checked ? { addedBy:me() } : {}), qty:'', note:'', count:0, pos:{}, created:serverTimestamp() });
     closeSheet(); toast(`Saved ${name}`);
   },
   merge: t => merge(t.closest('.cluster')),
@@ -1057,7 +1079,7 @@ document.addEventListener('pointerdown', e => {
   };
   const up = async () => {
     window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
-    el.classList.remove('drag'); S.dragging = false;
+    el.classList.remove('drag'); S.dragging = false; if (S.pending){ S.pending = false; render(); }
     const order = [...list.children].map(x => x.dataset.cat);
     try { await updateDoc(doc(db,'stores',sid), { catOrder:order }); } catch (err){ toast('Could not save the aisle order'); }
   };
