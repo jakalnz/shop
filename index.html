@@ -977,11 +977,21 @@ function openSettings(view = 'main'){
   const st = S.stores;
   if (view === 'history'){
     const when = t => new Date(t.at).toLocaleString('en-NZ', { weekday:'short', day:'numeric', month:'short', hour:'numeric', minute:'2-digit' });
-    openSheet(`<h2>List history</h2><p class="note">Your last ${MAX_TRIPS} finished or cleared lists. Restore puts the items back on the list.</p>
-      ${S.trips.length ? S.trips.map(t => `<div class="mini" data-id="${t.id}"><span class="grow"><strong>${t.kind === 'finished' ? 'Finished' : 'Cleared'}</strong>${t.store ? ' · ' + esc(t.store) : ''}<br><span class="note">${esc(when(t))} · ${t.items.length} item${t.items.length === 1 ? '' : 's'}</span>
+    openSheet(`<h2>List history</h2><p class="note">Your last ${MAX_TRIPS} finished or cleared lists. Tap a list to view and pick items to add back, or Restore for all of them.</p>
+      ${S.trips.length ? S.trips.map(t => `<div class="mini" data-id="${t.id}"><span class="grow" data-a="viewTrip" data-id="${t.id}" style="cursor:pointer"><strong>${t.kind === 'finished' ? 'Finished' : 'Cleared'}</strong>${t.store ? ' · ' + esc(t.store) : ''}<br><span class="note">${esc(when(t))} · ${t.items.length} item${t.items.length === 1 ? '' : 's'}</span>
         <br><span class="note">${esc(t.items.slice(0, 6).map(i => i.name).join(', '))}${t.items.length > 6 ? '…' : ''}</span></span>
         <button class="btn sm" data-a="restoreTrip" data-id="${t.id}">Restore</button><button class="btn sm danger" data-a="delTrip" data-id="${t.id}">✕</button></div>`).join('') : '<p class="note">Nothing yet. Finishing or clearing a list saves it here.</p>'}
       <div class="btns"><button class="btn" data-a="settings">Back</button></div>`);
+    return;
+  }
+  if (view.startsWith('trip:')){
+    const t = S.trips.find(x => x.id === view.slice(5)); if (!t){ openSettings('history'); return; }
+    const when = new Date(t.at).toLocaleString('en-NZ', { weekday:'short', day:'numeric', month:'short', hour:'numeric', minute:'2-digit' });
+    openSheet(`<h2>${t.kind === 'finished' ? 'Finished' : 'Cleared'} list${t.store ? ' · ' + esc(t.store) : ''}</h2>
+      <p class="note">${esc(when)} · ${t.items.length} item${t.items.length === 1 ? '' : 's'}. Pick what to add back to the current list.</p>
+      <div id="tripItems" data-tid="${t.id}">${t.items.map((i, n) => `<label class="cb"><input type="checkbox" data-n="${n}" checked> ${esc(i.name)}${i.qty ? ` <span class="note">${esc(i.qty)}</span>` : ''}</label>`).join('')}</div>
+      <div class="btns"><button class="btn sm" data-a="tripAll">All</button><button class="btn sm" data-a="tripNone">None</button></div>
+      <div class="btns"><button class="btn pri" data-a="addTripItems">Add selected</button><button class="btn" data-a="histView">Back</button></div>`);
     return;
   }
   if (view.startsWith('order:')){
@@ -1058,6 +1068,16 @@ const A = {
     closeSheet(); toast(`Restored ${tr.items.length} item${tr.items.length === 1 ? '' : 's'}`);
   },
   delTrip: async t => { await deleteDoc(doc(db,'trips',t.dataset.id)); },
+  viewTrip: t => openSettings('trip:' + t.dataset.id),
+  tripAll: () => document.querySelectorAll('#tripItems input').forEach(c => c.checked = true),
+  tripNone: () => document.querySelectorAll('#tripItems input').forEach(c => c.checked = false),
+  addTripItems: async () => {
+    const box = $('#tripItems'), tr = S.trips.find(x => x.id === box.dataset.tid); if (!tr) return;
+    const chosen = [...document.querySelectorAll('#tripItems input:checked')].map(c => tr.items[+c.dataset.n]);
+    if (!chosen.length){ toast('Nothing selected'); return; }
+    await restoreItems(chosen, { keepTicks:false, uncount:false });
+    closeSheet(); toast(`Added ${chosen.length} item${chosen.length === 1 ? '' : 's'}`);
+  },
   undo: async () => {
     const u = S.undo; if (!u) return; S.undo = null;
     $('#toast').classList.remove('on');
