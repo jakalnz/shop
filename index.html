@@ -927,7 +927,7 @@ function cands(r, n = 5){
       if (nn.includes(q) || q.includes(nn)) sc = Math.max(sc, .6);
       if (q.length >= 4 && lev(nn, q) <= 2) sc = Math.max(sc, .7);
     }
-    if (sc > 0) arr.push({ i, sc });
+    arr.push({ i, sc });
   }
   return arr.sort((a, b) => b.sc - a.sc || byName(a.i, b.i)).slice(0, n);
 }
@@ -935,7 +935,7 @@ function reviewReceipt(){
   const rows = parseReceipt($('#rc').value);
   if (!rows.length){ toast('No price lines found. Check the format.'); return; }
   const st = curStore();
-  S.rc = rows.map(r => ({ ...r, c: cands(r) }));
+  S.rc = rows.map(r => ({ ...r, c: cands(r, 999) }));
   openSheet(`<h2>Check the matches</h2>
     <p class="note">${rows.length} lines for ${esc(st.name)}. Change any match, or set it to Skip.</p>
     ${S.rc.map((r, n) => {
@@ -1000,7 +1000,7 @@ function openSettings(view = 'main'){
     <div class="mini"><input id="newStore" placeholder="Add a store"><button class="btn sm pri" data-a="addStore">Add</button></div>
     <label class="cb"><input type="checkbox" id="copyOrder" checked> Copy the current store's item order</label>
     <h3>Categories</h3>
-    ${S.cats.map(c => `<div class="mini"><span class="grow">${esc(c)}</span>
+    ${[...S.cats].sort((a,b) => a.localeCompare(b)).map(c => `<div class="mini"><span class="grow">${esc(c)}</span>
       <button class="btn sm" data-a="renCat" data-c="${esc(c)}">Rename</button>
       ${c !== 'Other' ? `<button class="btn sm danger" data-a="delCat" data-c="${esc(c)}">✕</button>` : ''}</div>`).join('')}
     <div class="mini"><input id="newCat" placeholder="Add a category"><button class="btn sm pri" data-a="addCat">Add</button></div>
