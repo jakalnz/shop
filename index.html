@@ -283,6 +283,20 @@ function lev(a, b){
   }
   return p[b.length];
 }
+const WEIGHED = ['Fruit & Veg', 'Meat & Fish'];
+const defKg = cat => WEIGHED.includes(cat);
+// Per-kg unless the item says otherwise (i.unit = 'kg' | 'each'), else by category
+const perKg = i => i.unit ? i.unit === 'kg' : defKg(i.cat);
+const priceTxt = (i, p) => `$${p.toFixed(2)}${perKg(i) ? '/kg' : ''}`;
+// List-row text: "$18.50/kg (last $16.00, 12 Nov)"; bracket = what was spent last time at this store
+const rowPrice = (i, p, sid) => {
+  const s = i.spent?.[sid];
+  const showLast = s && (perKg(i) || Math.abs(s.amt - p) > 0.005);
+  return priceTxt(i, p) + (showLast ? ` (last $${s.amt.toFixed(2)}, ${new Date(s.at).toLocaleDateString('en-NZ', { day:'numeric', month:'short' })})` : '');
+};
+// Weight in kg from a quantity like "500g", "1.5kg", "2 kg"; null if not a weight
+const qtyKg = i => { const m = String(i.qty || '').match(/^\s*(\d+(?:\.\d+)?)\s*(kg|g)\s*$/i); return m ? +m[1] / (m[2].toLowerCase() === 'g' ? 1000 : 1) : null; };
+const lineCost = (i, p) => perKg(i) ? (qtyKg(i) == null ? null : p * qtyKg(i)) : p * qtyN(i);
 const qtyN = i => { const m = String(i.qty || '').match(/^\s*(\d+(?:\.\d+)?)\s*[x×]?\s*$/i); return m ? +m[1] || 1 : 1; };
 const byName = (a, b) => a.name.localeCompare(b.name, 'en', {sensitivity:'base'});
 let toastT;
@@ -403,7 +417,7 @@ function row(i, o = {}){
     i.note ? `<span>${esc(i.note)}</span>` : '',
     o.chip ? `<span class="pill plain">${esc(i.cat || 'Other')}</span>` : '',
     i.misc ? `<span class="pill plain">one-off</span>` : '',
-    (curStore() && i.price?.[curStore().id] != null) ? `<span>$${i.price[curStore().id].toFixed(2)}</span>` : '',
+    (curStore() && i.price?.[curStore().id] != null) ? `<span>${rowPrice(i, i.price[curStore().id], curStore().id)}</span>` : '',
     i.hasPhoto ? `<button class="pill plain cam" data-a="photo" aria-label="Show photo">Photo</button>` : '',
     (i.addedBy && i.addedBy.uid !== S.user?.uid) ? `<span>+ ${esc(i.addedBy.name)}</span>` : '',
     (i.ticked && i.tickedBy && i.tickedBy.uid !== S.user?.uid) ? `<span>✓ ${esc(i.tickedBy.name)}</span>` : ''
@@ -443,8 +457,8 @@ function renderList(){
   }
   if (done.length) h += `<h3 class="sec">In the trolley (${done.length})</h3><ul class="rows">${done.map(i => row(i)).join('')}</ul>`;
   if (all.length){
-    const priced = all.filter(i => i.price?.[st.id] != null);
-    const est = priced.reduce((t, i) => t + i.price[st.id] * qtyN(i), 0);
+    const priced = all.filter(i => i.price?.[st.id] != null && lineCost(i, i.price[st.id]) != null);
+    const est = priced.reduce((t, i) => t + lineCost(i, i.price[st.id]), 0);
     h += priced.length
       ? `<div class="est"><b>~$${est.toFixed(2)}</b> at ${esc(st.name)}<span>${priced.length} of ${all.length} items priced. Add prices in an item's details.</span></div>`
       : `<div class="est"><span style="display:block">Add a price to an item's details to see an estimate for ${esc(st.name)}.</span></div>`;
@@ -593,6 +607,7 @@ function openEdit(id){
       <label>Note<input id="f_note" value="${esc(i.note||'')}" placeholder="the low-salt one"></label></div>
       <label class="cb"><input type="checkbox" id="f_urg" ${i.urgent ? 'checked' : ''}> We're out. Highlight it for the shopper</label>` : ''}
     ${i.misc ? '' : `<label>Repeat<select id="f_every">${[['','Never'],[7,'Every week'],[14,'Every 2 weeks'],[30,'Every month']].map(([v,l]) => `<option value="${v}" ${(i.every||'') == v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`}
+    <label>Priced per<select id="f_unit"><option value="kg" ${perKg(i) ? 'selected' : ''}>kg (by weight)</option><option value="each" ${perKg(i) ? '' : 'selected'}>each (per item)</option></select></label>
     <label>Price at ${esc(curStore()?.name || 'this store')}<input id="f_price" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" value="${i.price?.[curStore()?.id] ?? ''}"></label>
     <h3>Photo</h3>
     <div id="photoBox" class="photo">${i.hasPhoto ? '<p class="note">Loading…</p>' : ''}</div>
@@ -836,12 +851,14 @@ function exportCsv(){
 /* ---------- receipt prices ---------- */
 const CLAUDE_MODEL = 'claude-sonnet-5';
 const RECEIPT_PROMPT = names => `Here is a supermarket receipt. List every product line, one per line, in exactly this format and nothing else:
-receipt text | plain product name | unit price | quantity
+receipt text | plain product name | unit price | quantity | amount charged | kg or each
 
 Rules:
 - Receipt text: exactly as printed on the receipt.
 - Plain product name: how I'd write it on a shopping list. If the product matches one of my items below, use my exact wording.
-- Unit price: price per item in dollars, no $ sign. For weighed items (e.g. 0.532kg @ $9.99/kg) give the price actually charged and quantity 1.
+- Unit price: price per item in dollars, no $ sign. For weighed items (e.g. 0.532kg @ $9.99/kg) give the per-kg price (9.99 in that example, not the amount charged) and the weight in kg as the quantity (0.532).
+- Amount charged: the total dollars charged for that line (quantity x unit price, after any line discount).
+- Last column: "kg" if the line is sold by weight, otherwise "each".
 - Ignore totals, GST, bags, discounts, loyalty and payment lines.
 - Put the whole answer in one code block.
 
@@ -909,7 +926,10 @@ function parseReceipt(txt){
     if (parts.length < 3) continue;
     const price = parseFloat(parts[2].replace(/[^0-9.]/g, ''));
     if (isNaN(price)) continue;
-    out.push({ raw: parts[0], name: parts[1] || parts[0], price });
+    const q = parseFloat((parts[3] || '').replace(/[^0-9.]/g, '')) || 1;
+    const amt = parseFloat((parts[4] || '').replace(/[^0-9.]/g, ''));
+    const u = /kg/i.test(parts[5] || '') ? 'kg' : /each|ea/i.test(parts[5] || '') ? 'each' : null;
+    out.push({ raw: parts[0], name: parts[1] || parts[0], price, amt: isNaN(amt) ? price * q : amt, unit: u });
   }
   return out;
 }
@@ -945,11 +965,13 @@ function reviewReceipt(){
         <div class="mini" style="border:0;padding-bottom:0">
           <select class="rsel">
             <option value="">Skip</option>
-            ${r.c.map(x => `<option value="${x.i.id}" ${x.i.id === pick ? 'selected' : ''}>${esc(x.i.name)}${x.i.price?.[st.id] != null ? ` (was $${x.i.price[st.id].toFixed(2)})` : ''}</option>`).join('')}
+            ${r.c.map(x => `<option value="${x.i.id}" ${x.i.id === pick ? 'selected' : ''}>${esc(x.i.name)}${x.i.price?.[st.id] != null ? ` (was ${priceTxt(x.i, x.i.price[st.id])})` : ''}</option>`).join('')}
             <option value="__new">Add “${esc(r.name)}” as new item</option>
           </select>
           <input class="rprice" type="number" step="0.01" min="0" inputmode="decimal" value="${r.price.toFixed(2)}" style="flex:none;width:86px" aria-label="Price">
-        </div></div>`;
+          <select class="runit" style="flex:none;width:76px" aria-label="Priced per"><option value="each" ${(r.unit || (top && top.sc >= .6 && perKg(top.i) ? 'kg' : 'each')) === 'kg' ? '' : 'selected'}>each</option><option value="kg" ${(r.unit || (top && top.sc >= .6 && perKg(top.i) ? 'kg' : 'each')) === 'kg' ? 'selected' : ''}>/kg</option></select>
+        </div>
+        <div class="note" style="margin:2px 0 0">Spent $${r.amt.toFixed(2)}</div></div>`;
     }).join('')}
     <div class="btns"><button class="btn pri" data-a="rcApply">Save prices</button><button class="btn" data-a="receipt">Back</button></div>`);
 }
@@ -959,10 +981,16 @@ async function applyReceipt(){
     const r = S.rc[+card.dataset.r], v = card.querySelector('.rsel').value, p = parseFloat(card.querySelector('.rprice').value);
     if (!v || isNaN(p)) return;
     let id = v;
+    const wantKg = card.querySelector('.runit').value === 'kg', spent = { amt: r.amt, at: Date.now() };
     if (v === '__new'){
       const ref = doc(collection(db, 'items')); id = ref.id;
-      b.set(ref, { name:r.name, cat:'Other', misc:false, onList:false, ticked:false, qty:'', note:'', count:0, pos:{}, price:{ [st.id]: p }, created:serverTimestamp() });
-    } else b.update(iref(id), { [`price.${st.id}`]: p });
+      b.set(ref, { name:r.name, cat:'Other', misc:false, onList:false, ticked:false, qty:'', note:'', count:0, pos:{}, price:{ [st.id]: p }, spent:{ [st.id]: spent }, ...(wantKg ? { unit:'kg' } : {}), created:serverTimestamp() });
+    } else {
+      const it = byId(id), u = { [`price.${st.id}`]: p, [`spent.${st.id}`]: spent };
+      // learn: if the receipt disagrees with how this item is currently priced, remember it (or clear back to the category default)
+      if (it && wantKg !== perKg(it)) u.unit = wantKg === defKg(it.cat) ? deleteField() : (wantKg ? 'kg' : 'each');
+      b.update(iref(id), u);
+    }
     const k = key(r.raw); if (k) map[k] = id;
     n++;
   });
@@ -1092,6 +1120,8 @@ const A = {
     if ($('#f_save')?.checked) upd.misc = false;
     if ($('#f_urg')) upd.urgent = $('#f_urg').checked;
     if ($('#f_every')){ const ev = +$('#f_every').value; upd.every = ev || deleteField(); if (!ev) upd.due = deleteField(); }
+    const wantKg = $('#f_unit').value === 'kg';
+    upd.unit = wantKg === defKg(upd.cat) ? deleteField() : (wantKg ? 'kg' : 'each');
     const pv = parseFloat($('#f_price').value), st = curStore();
     if (st) upd[`price.${st.id}`] = isNaN(pv) ? deleteField() : Math.max(0, pv);
     await updateDoc(iref(id), upd); closeSheet();
