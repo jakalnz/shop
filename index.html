@@ -104,6 +104,7 @@ main{max-width:680px;margin:0 auto;padding:0 0 110px}
 .nm{font-size:18px;font-weight:500;overflow-wrap:anywhere}
 .sub{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;align-items:center;font-size:13px;color:var(--mute)}
 .qty{font-weight:600;color:var(--ink)}
+.pill.cheap{color:var(--ok);border-color:var(--ok)}
 .storehead{display:flex;align-items:center;gap:10px;margin-top:6px}
 .storehead h3{margin:10px 0 4px}
 .storehead .note{flex:1;margin:0}
@@ -308,30 +309,39 @@ const parsePack = s => {
 const unitPrice = (i, p) => perKg(i) ? { v: p, u: 'kg' } : i.packG ? { v: p / i.packG * 1000, u: 'kg' } : i.packMl ? { v: p / i.packMl * 1000, u: 'L' } : null;
 // List-row text: "$18.50/kg (last $16.00, 12 Nov)"; bracket = what was spent last time at this store
 const rowPrice = (i, p, sid) => {
-  const s = i.spent?.[sid], up = perKg(i) ? null : unitPrice(i, p);
+  const s = i.spent?.[sid]; i = at(i, sid); const up = perKg(i) ? null : unitPrice(i, p);
   const showLast = s && (perKg(i) || Math.abs(s.amt - p) > 0.005);
   return priceTxt(i, p) + (up ? ` ($${up.v.toFixed(2)}/${up.u})` : '') + (showLast ? ` (last $${s.amt.toFixed(2)}, ${new Date(s.at).toLocaleDateString('en-NZ', { day:'numeric', month:'short' })})` : '');
 };
 // Weight in kg from a quantity like "500g", "1.5kg", "2 kg"; null if not a weight
 const qtyKg = i => { const m = String(i.qty || '').match(/^\s*(\d+(?:\.\d+)?)\s*(kg|g)\s*$/i); return m ? +m[1] / (m[2].toLowerCase() === 'g' ? 1000 : 1) : null; };
-const lineCost = (i, p) => perKg(i) ? (qtyKg(i) == null ? null : p * qtyKg(i)) : p * qtyN(i);
+const lineCost = (i, p, sid) => { const a = sid ? at(i, sid) : i; return perKg(a) ? (qtyKg(i) == null ? null : p * qtyKg(i)) : p * qtyN(i); };
 const qtyStepOk = i => !i.qty || /^\s*\d+(?:\.\d+)?\s*[x×]?\s*$/.test(i.qty);
-// Where we usually buy this: the item's own setting, then its category's, then the store that's clearly cheapest, else where we last bought it
+// Each store's price has its own basis (su.{store} = 'kg' | 'each'): $4 a punnet at one store is not $4/kg at another
+const at = (i, sid) => i.su?.[sid] ? { ...i, unit: i.su[sid] } : i;
+// Comparable value for a store's price: $/kg, $/L, or $ per pack ('each'). Only values with the same unit can be compared
+const cmpVal = (i, sid) => { const p = i.price?.[sid]; if (p == null) return null; const a = at(i, sid); return unitPrice(a, p) || { v: p, u: 'each' }; };
+const priceLabel = (i, p, sid) => { const a = at(i, sid), up = perKg(a) ? null : unitPrice(a, p); return priceTxt(a, p) + (up ? ` ($${up.v.toFixed(2)}/${up.u})` : ''); };
+// Where we usually buy this: the item's own setting, then its category's, then the store that's clearly cheapest (like for like), else where we last bought it
 const usualStore = i => {
   const ok = id => id && S.stores.find(s => s.id === id);
   const set = ok(i.home) || ok(S.catHome[i.cat]); if (set) return set;
   const priced = S.stores.filter(s => i.price?.[s.id] != null);
   const bought = S.stores.filter(s => i.spent?.[s.id]).sort((a, b) => i.spent[b.id].at - i.spent[a.id].at)[0];
-  const cheap = priced.sort((a, b) => i.price[a.id] - i.price[b.id])[0];
-  if (cheap && (!bought || i.price[cheap.id] <= (i.price[bought.id] ?? Infinity) * .95)) return cheap;
-  return bought || cheap || null;
+  const base = bought || priced[0]; if (!base) return null;
+  const bv = cmpVal(i, base.id);
+  const cheap = bv && priced.filter(s => cmpVal(i, s.id).u === bv.u).sort((a, b) => cmpVal(i, a.id).v - cmpVal(i, b.id).v)[0];
+  return cheap && cmpVal(i, cheap.id).v <= bv.v * .95 ? cheap : base;
 };
-// Cheaper at another store? Returns { s: store, p: price } when at least 5% (and 5c) below this store's price
+// The price to show from another store: a clearly cheaper like-for-like one if there is one, else the most recently bought/seen.
+// Returns { s, p, txt, cheaper }; `cheaper` is only true when the two prices share a unit ($/kg vs $/kg, not $/kg vs a punnet)
 const cheaperElsewhere = (i, cur = curStore()) => {
-  const here = cur && i.price?.[cur.id]; if (here == null) return null;
-  let best = null;
-  for (const s of S.stores){ const p = s.id !== cur.id && i.price?.[s.id]; if (p != null && p !== false && (!best || p < best.p)) best = { s, p }; }
-  return best && best.p <= here * .95 && here - best.p >= .05 ? best : null;
+  const others = S.stores.filter(s => (!cur || s.id !== cur.id) && i.price?.[s.id] != null); if (!others.length) return null;
+  const here = cur && cmpVal(i, cur.id);
+  const cheap = here && others.filter(s => { const c = cmpVal(i, s.id); return c.u === here.u && c.v <= here.v * .95 && here.v - c.v >= .05; })
+    .sort((a, b) => cmpVal(i, a.id).v - cmpVal(i, b.id).v)[0];
+  const s = cheap || others.sort((a, b) => (i.spent?.[b.id]?.at || 0) - (i.spent?.[a.id]?.at || 0) || i.price[a.id] - i.price[b.id])[0];
+  return { s, p: i.price[s.id], txt: priceLabel(i, i.price[s.id], s.id), cheaper: !!cheap };
 };
 const qtyN = i => { const m = String(i.qty || '').match(/^\s*(\d+(?:\.\d+)?)\s*[x×]?\s*$/i); return m ? +m[1] || 1 : 1; };
 const byName = (a, b) => a.name.localeCompare(b.name, 'en', {sensitivity:'base'});
@@ -456,8 +466,9 @@ function row(i, o = {}){
     i.misc ? `<span class="pill plain">one-off</span>` : '',
     (rs && i.price?.[rs.id] != null) ? `<span>${rowPrice(i, i.price[rs.id], rs.id)}</span>` : '',
     (() => { const c = !i.ticked && cheaperElsewhere(i, rs); if (!c) return '';
-      return o.store ? `<button class="pill plain cam" data-a="moveItem" data-sid="${c.s.id}" aria-label="Buy at ${esc(c.s.name)} instead">↗ move to ${esc(c.s.name)} $${c.p.toFixed(2)}</button>`
-        : `<button class="pill plain cam" data-a="switchStore" data-sid="${c.s.id}" aria-label="Cheaper at ${esc(c.s.name)}">↗ ${esc(c.s.name)} $${c.p.toFixed(2)}</button>`; })(),
+      const lead = c.cheaper ? '↗ cheaper at' : 'also at';
+      return o.store ? `<button class="pill plain cam${c.cheaper ? ' cheap' : ''}" data-a="moveItem" data-sid="${c.s.id}" aria-label="Buy at ${esc(c.s.name)} instead">${lead} ${esc(c.s.name)} ${c.txt} · move</button>`
+        : `<button class="pill plain cam${c.cheaper ? ' cheap' : ''}" data-a="switchStore" data-sid="${c.s.id}" aria-label="${lead} ${esc(c.s.name)}">${lead} ${esc(c.s.name)} ${c.txt}</button>`; })(),
     i.hasPhoto ? `<button class="pill plain cam" data-a="photo" aria-label="Show photo">Photo</button>` : '',
     (i.addedBy && i.addedBy.uid !== S.user?.uid) ? `<span>+ ${esc(i.addedBy.name)}</span>` : '',
     (i.ticked && i.tickedBy && i.tickedBy.uid !== S.user?.uid) ? `<span>✓ ${esc(i.tickedBy.name)}</span>` : ''
@@ -487,8 +498,8 @@ function renderList(){
       for (const k of ids){
         const s = S.stores.find(x => x.id === k), g = groups.get(k);
         if (s) g.sort(cmpShop(s)); else g.sort(byName);
-        const priced = s ? g.filter(i => i.price?.[s.id] != null && lineCost(i, i.price[s.id]) != null) : [];
-        const est = priced.reduce((t, i) => t + lineCost(i, i.price[s.id]), 0);
+        const priced = s ? g.filter(i => i.price?.[s.id] != null && lineCost(i, i.price[s.id], s.id) != null) : [];
+        const est = priced.reduce((t, i) => t + lineCost(i, i.price[s.id], s.id), 0);
         h += `<div class="storehead"><h3 class="cathead">${s ? esc(s.name) : 'Not sure where yet'}</h3>
           <span class="note">${g.length} item${g.length === 1 ? '' : 's'}${priced.length ? ` · ~$${est.toFixed(2)}` : ''}</span>
           ${s && s.id !== st.id ? `<button class="btn sm" data-a="switchStore" data-sid="${s.id}">Shop here</button>` : ''}</div>
@@ -512,8 +523,8 @@ function renderList(){
   }
   if (done.length) h += `<h3 class="sec">In the trolley (${done.length})</h3><ul class="rows">${done.map(i => row(i)).join('')}</ul>`;
   if (all.length){
-    const priced = all.filter(i => i.price?.[st.id] != null && lineCost(i, i.price[st.id]) != null);
-    const est = priced.reduce((t, i) => t + lineCost(i, i.price[st.id]), 0);
+    const priced = all.filter(i => i.price?.[st.id] != null && lineCost(i, i.price[st.id], st.id) != null);
+    const est = priced.reduce((t, i) => t + lineCost(i, i.price[st.id], st.id), 0);
     h += priced.length
       ? `<div class="est"><b>~$${est.toFixed(2)}</b> at ${esc(st.name)}<span>${priced.length} of ${all.length} items priced. Add prices in an item's details.</span></div>`
       : `<div class="est"><span style="display:block">Add a price to an item's details to see an estimate for ${esc(st.name)}.</span></div>`;
@@ -663,7 +674,7 @@ function openEdit(id){
       <label>Note<input id="f_note" value="${esc(i.note||'')}" placeholder="the low-salt one"></label></div>
       <label class="cb"><input type="checkbox" id="f_urg" ${i.urgent ? 'checked' : ''}> We're out. Highlight it for the shopper</label>` : ''}
     ${i.misc ? '' : `<label>Repeat<select id="f_every">${[['','Never'],[7,'Every week'],[14,'Every 2 weeks'],[30,'Every month']].map(([v,l]) => `<option value="${v}" ${(i.every||'') == v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`}
-    <label>Priced per<select id="f_unit"><option value="kg" ${perKg(i) ? 'selected' : ''}>kg (by weight)</option><option value="each" ${perKg(i) ? '' : 'selected'}>each (per item)</option></select></label>
+    <label>Priced per at ${esc(curStore()?.name || 'this store')}<select id="f_unit"><option value="kg" ${perKg(at(i, curStore()?.id)) ? 'selected' : ''}>kg (by weight)</option><option value="each" ${perKg(at(i, curStore()?.id)) ? '' : 'selected'}>each (per item / pack)</option></select></label>
     ${i.misc ? '' : `<label>Usually buy at<select id="f_home"><option value="">Auto (cheapest / last bought)</option>${S.stores.map(s => `<option value="${s.id}" ${i.home === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>`}
     <label>Pack size (for $/kg or $/L and the recipes app)<input id="f_size" value="${esc(i.size || '')}" placeholder="400g, 1.5L, 6x375ml"></label>
     <label>Price at ${esc(curStore()?.name || 'this store')}<input id="f_price" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" value="${i.price?.[curStore()?.id] ?? ''}"></label>
@@ -1035,11 +1046,11 @@ function reviewReceipt(){
         <div class="mini" style="border:0;padding-bottom:0">
           <select class="rsel">
             <option value="">Skip</option>
-            ${r.c.map(x => `<option value="${x.i.id}" ${x.i.id === pick ? 'selected' : ''}>${esc(x.i.name)}${x.i.price?.[st.id] != null ? ` (was ${priceTxt(x.i, x.i.price[st.id])})` : ''}</option>`).join('')}
+            ${r.c.map(x => `<option value="${x.i.id}" ${x.i.id === pick ? 'selected' : ''}>${esc(x.i.name)}${x.i.price?.[st.id] != null ? ` (was ${priceTxt(at(x.i, st.id), x.i.price[st.id])})` : ''}</option>`).join('')}
             <option value="__new">Add “${esc(r.name)}” as new item</option>
           </select>
           <input class="rprice" type="number" step="0.01" min="0" inputmode="decimal" value="${r.price.toFixed(2)}" style="flex:none;width:86px" aria-label="Price">
-          <select class="runit" style="flex:none;width:76px" aria-label="Priced per"><option value="each" ${(r.unit || (top && top.sc >= .6 && perKg(top.i) ? 'kg' : 'each')) === 'kg' ? '' : 'selected'}>each</option><option value="kg" ${(r.unit || (top && top.sc >= .6 && perKg(top.i) ? 'kg' : 'each')) === 'kg' ? 'selected' : ''}>/kg</option></select>
+          <select class="runit" style="flex:none;width:76px" aria-label="Priced per"><option value="each" ${(r.unit || (top && top.sc >= .6 && perKg(at(top.i, st.id)) ? 'kg' : 'each')) === 'kg' ? '' : 'selected'}>each</option><option value="kg" ${(r.unit || (top && top.sc >= .6 && perKg(at(top.i, st.id)) ? 'kg' : 'each')) === 'kg' ? 'selected' : ''}>/kg</option></select>
         </div>
         <div class="note" style="margin:2px 0 0">Spent $${r.amt.toFixed(2)}${r.pack ? ` · ${esc(r.pack.size)}` : ''}${r.pack && !(r.unit === 'kg') ? ` · ${(() => { const up = unitPrice({ unit:'each', cat:'', ...r.pack }, r.price); return up ? `$${up.v.toFixed(2)}/${up.u}` : ''; })()}` : ''}</div></div>`;
     }).join('')}
@@ -1061,11 +1072,13 @@ async function applyReceipt(){
     const wantKg = card.querySelector('.runit').value === 'kg', spent = { amt: r.amt, at: Date.now() }, shelf = S.rcMode === 'shelf';
     if (v === '__new'){
       const ref = doc(collection(db, 'items')); id = ref.id;
-      b.set(ref, { name:r.name, cat:'Other', misc:false, onList:false, ticked:false, qty:'', note:'', count:0, pos:{}, price:{ [st.id]: p }, ...(shelf ? {} : { spent:{ [st.id]: spent } }),...(wantKg ? { unit:'kg' } : {}), ...(!wantKg && r.pack ? r.pack : {}), created:serverTimestamp() });
+      b.set(ref, { name:r.name, cat:'Other', misc:false, onList:false, ticked:false, qty:'', note:'', count:0, pos:{}, price:{ [st.id]: p }, su:{ [st.id]: wantKg ? 'kg' : 'each' }, ...(shelf ? {} : { spent:{ [st.id]: spent } }),...(wantKg ? { unit:'kg' } : {}), ...(!wantKg && r.pack ? r.pack : {}), created:serverTimestamp() });
     } else {
       const it = byId(id), u = { [`price.${st.id}`]: p, ...(shelf ? {} : { [`spent.${st.id}`]: spent }) };
       // learn: if the receipt disagrees with how this item is currently priced, remember it (or clear back to the category default)
-      if (it && wantKg !== perKg(it)) u.unit = wantKg === defKg(it.cat) ? deleteField() : (wantKg ? 'kg' : 'each');
+      u[`su.${st.id}`] = wantKg ? 'kg' : 'each';
+      // the item-wide default only follows the receipt when no other store has a price (otherwise it would re-label their prices)
+      if (it && wantKg !== perKg(it) && !S.stores.some(s => s.id !== st.id && it.price?.[s.id] != null)) u.unit = wantKg === defKg(it.cat) ? deleteField() : (wantKg ? 'kg' : 'each');
       // learn pack size from the receipt only when the item has none (keeps manual edits)
       if (it && r.pack && !wantKg && it.packG == null && it.packMl == null) Object.assign(u, r.pack);
       b.update(iref(id), u);
@@ -1086,10 +1099,12 @@ function openSavings(){
   const items = S.items.filter(i => !i.misc), money = n => `$${n.toFixed(2)}`;
   // items priced at two or more stores, biggest gap (weighted by how often we buy) first
   const cmp = items.map(i => {
-    const ps = S.stores.filter(s => i.price?.[s.id] != null).map(s => ({ s, p: i.price[s.id] })).sort((a, b) => a.p - b.p);
-    if (ps.length < 2) return null;
-    const best = ps[0], worst = ps[ps.length - 1], gap = worst.p - best.p;
-    return gap >= .05 && gap >= worst.p * .05 ? { i, best, worst, gap, w: gap * Math.max(1, i.count || 1) } : null;
+    // like for like only: group by $/kg, $/L or per-pack, and compare within the biggest group
+    const ps = S.stores.filter(s => i.price?.[s.id] != null).map(s => ({ s, p: i.price[s.id], c: cmpVal(i, s.id) }));
+    const grp = ['kg', 'L', 'each'].map(u => ps.filter(x => x.c.u === u).sort((a, b) => a.c.v - b.c.v)).sort((a, b) => b.length - a.length)[0];
+    if (!grp || grp.length < 2) return null;
+    const best = grp[0], worst = grp[grp.length - 1], gap = worst.c.v - best.c.v;
+    return gap >= .05 && gap >= worst.c.v * .05 ? { i, best, worst, gap, w: gap * Math.max(1, i.count || 1) } : null;
   }).filter(Boolean).sort((a, b) => b.w - a.w).slice(0, 25);
   // regularly bought items with no price at a store that prices other things
   const missing = S.stores.map(s => {
@@ -1100,7 +1115,7 @@ function openSavings(){
   openSheet(`<h2>Savings</h2>
     <p class="note">Based on the prices you've saved from receipts and shelf photos.</p>
     <h3>Cheaper at another store</h3>
-    ${cmp.length ? cmp.map(c => `<div class="mini" data-id="${c.i.id}"><span class="grow"><b>${esc(c.i.name)}</b><br><span class="note">${esc(c.best.s.name)} ${money(c.best.p)} vs ${esc(c.worst.s.name)} ${money(c.worst.p)} · save ${money(c.gap)}${c.i.home === c.best.s.id ? ' · already buying there' : ''}</span></span>
+    ${cmp.length ? cmp.map(c => `<div class="mini" data-id="${c.i.id}"><span class="grow"><b>${esc(c.i.name)}</b><br><span class="note">${esc(c.best.s.name)} ${priceLabel(c.i, c.best.p, c.best.s.id)} vs ${esc(c.worst.s.name)} ${priceLabel(c.i, c.worst.p, c.worst.s.id)} · save ${money(c.gap)}${c.best.c.u === 'each' ? '' : '/' + c.best.c.u}${c.i.home === c.best.s.id ? ' · already buying there' : ''}</span></span>
       ${c.i.home === c.best.s.id ? '' : `<button class="btn sm" data-a="moveItem" data-sid="${c.best.s.id}">Buy at ${esc(c.best.s.name)}</button>`}</div>`).join('')
       : '<p class="note">Nothing to compare yet. You need prices for the same item at two stores. Use Shelf prices at the other store to get started.</p>'}
     ${missing.length ? `<h3>Worth a price check</h3>${missing.map(m => `<p class="note" style="margin:6px 0"><b>${esc(m.s.name)}</b>: ${m.list.map(i => esc(i.name)).join(', ')}</p>`).join('')}
@@ -1244,7 +1259,9 @@ const A = {
     if ($('#f_urg')) upd.urgent = $('#f_urg').checked;
     if ($('#f_every')){ const ev = +$('#f_every').value; upd.every = ev || deleteField(); if (!ev) upd.due = deleteField(); }
     const wantKg = $('#f_unit').value === 'kg';
-    upd.unit = wantKg === defKg(upd.cat) ? deleteField() : (wantKg ? 'kg' : 'each');
+    const st0 = curStore(), othersPriced = S.stores.some(s => s.id !== st0?.id && i.price?.[s.id] != null);
+    if (!othersPriced) upd.unit = wantKg === defKg(upd.cat) ? deleteField() : (wantKg ? 'kg' : 'each');
+    if (st0) upd[`su.${st0.id}`] = wantKg ? 'kg' : 'each';
     if ($('#f_home')) upd.home = $('#f_home').value || deleteField();
     const sz = $('#f_size').value.trim(), pk = parsePack(sz);
     if (!sz) Object.assign(upd, { size: deleteField(), packG: deleteField(), packMl: deleteField() });
