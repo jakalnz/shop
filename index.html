@@ -104,6 +104,9 @@ main{max-width:680px;margin:0 auto;padding:0 0 110px}
 .nm{font-size:18px;font-weight:500;overflow-wrap:anywhere}
 .sub{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;align-items:center;font-size:13px;color:var(--mute)}
 .qty{font-weight:600;color:var(--ink)}
+.storehead{display:flex;align-items:center;gap:10px;margin-top:6px}
+.storehead h3{margin:10px 0 4px}
+.storehead .note{flex:1;margin:0}
 .qctl{display:flex;gap:6px;flex:none}
 .qctl button{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:600 20px/1 inherit;display:grid;place-items:center;cursor:pointer;padding:0}
 .qctl button:active{background:var(--tag);color:var(--tag-ink)}
@@ -215,6 +218,7 @@ textarea{min-height:170px}
       </div>
       <details id="usual"></details>
       <div class="seg" id="sortSeg">
+        <button data-a="sort" data-s="store">By store</button>
         <button data-a="sort" data-s="shop">Shop order</button>
         <button data-a="sort" data-s="cat">Category</button>
         <button data-a="sort" data-s="az">A–Z</button>
@@ -238,6 +242,8 @@ textarea{min-height:170px}
         <button class="btn sm" data-a="dupes">Tidy duplicates</button>
         <button class="btn sm" data-a="importer">Import</button>
         <button class="btn sm" data-a="receipt">Receipt prices</button>
+        <button class="btn sm" data-a="shelf">Shelf prices</button>
+        <button class="btn sm" data-a="savings">Savings</button>
         <button class="btn sm" data-a="export">Export</button>
       </div>
       <div class="count" id="icount"></div>
@@ -310,9 +316,19 @@ const rowPrice = (i, p, sid) => {
 const qtyKg = i => { const m = String(i.qty || '').match(/^\s*(\d+(?:\.\d+)?)\s*(kg|g)\s*$/i); return m ? +m[1] / (m[2].toLowerCase() === 'g' ? 1000 : 1) : null; };
 const lineCost = (i, p) => perKg(i) ? (qtyKg(i) == null ? null : p * qtyKg(i)) : p * qtyN(i);
 const qtyStepOk = i => !i.qty || /^\s*\d+(?:\.\d+)?\s*[x×]?\s*$/.test(i.qty);
+// Where we usually buy this: the item's own setting, then its category's, then the store that's clearly cheapest, else where we last bought it
+const usualStore = i => {
+  const ok = id => id && S.stores.find(s => s.id === id);
+  const set = ok(i.home) || ok(S.catHome[i.cat]); if (set) return set;
+  const priced = S.stores.filter(s => i.price?.[s.id] != null);
+  const bought = S.stores.filter(s => i.spent?.[s.id]).sort((a, b) => i.spent[b.id].at - i.spent[a.id].at)[0];
+  const cheap = priced.sort((a, b) => i.price[a.id] - i.price[b.id])[0];
+  if (cheap && (!bought || i.price[cheap.id] <= (i.price[bought.id] ?? Infinity) * .95)) return cheap;
+  return bought || cheap || null;
+};
 // Cheaper at another store? Returns { s: store, p: price } when at least 5% (and 5c) below this store's price
-const cheaperElsewhere = i => {
-  const cur = curStore(), here = cur && i.price?.[cur.id]; if (here == null) return null;
+const cheaperElsewhere = (i, cur = curStore()) => {
+  const here = cur && i.price?.[cur.id]; if (here == null) return null;
   let best = null;
   for (const s of S.stores){ const p = s.id !== cur.id && i.price?.[s.id]; if (p != null && p !== false && (!best || p < best.p)) best = { s, p }; }
   return best && best.p <= here * .95 && here - best.p >= .05 ? best : null;
@@ -328,7 +344,7 @@ function toast(m, act){
 
 /* ---------- state ---------- */
 const S = {
-  user:null, items:[], stores:[], trips:[], undo:null, flagNext:false, presence:{}, barcodes:{}, aliases:{}, rc:[], cats:[...DEFAULT_CATS],
+  user:null, items:[], stores:[], catHome:{}, trips:[], undo:null, flagNext:false, presence:{}, barcodes:{}, aliases:{}, rc:[], cats:[...DEFAULT_CATS],
   storeId: localStorage.getItem('storeId') || '',
   sort: localStorage.getItem('sort') || 'shop',
   tab:'list', dragging:false, pending:false, liveSheet:null
@@ -398,7 +414,7 @@ function subscribe(){
   unsubs.push(onSnapshot(doc(db,'meta','barcodes'), snap => { S.barcodes = snap.exists() ? (snap.data().map || {}) : {}; }, denied));
   unsubs.push(onSnapshot(doc(db,'meta','aliases'), snap => { S.aliases = snap.exists() ? (snap.data().map || {}) : {}; }, denied));
   unsubs.push(onSnapshot(doc(db,'meta','settings'), snap => {
-    if (snap.exists()) S.cats = snap.data().cats || S.cats;
+    if (snap.exists()){ S.cats = snap.data().cats || S.cats; S.catHome = snap.data().catHome || {}; }
     else if (!snap.metadata.fromCache) setDoc(doc(db,'meta','settings'), { cats:[...DEFAULT_CATS] });
     render();
   }, denied));
@@ -432,13 +448,16 @@ const gripSvg = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy=
 const tickSvg = '<svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg>';
 
 function row(i, o = {}){
+  const rs = o.store || curStore();
   const sub = [
     i.qty ? `<span class="qty">${esc(i.qty)}</span>` : '',
     i.note ? `<span>${esc(i.note)}</span>` : '',
     o.chip ? `<span class="pill plain">${esc(i.cat || 'Other')}</span>` : '',
     i.misc ? `<span class="pill plain">one-off</span>` : '',
-    (curStore() && i.price?.[curStore().id] != null) ? `<span>${rowPrice(i, i.price[curStore().id], curStore().id)}</span>` : '',
-    (() => { const c = !i.ticked && cheaperElsewhere(i); return c ? `<button class="pill plain cam" data-a="switchStore" data-sid="${c.s.id}" aria-label="Cheaper at ${esc(c.s.name)}">↗ ${esc(c.s.name)} $${c.p.toFixed(2)}</button>` : ''; })(),
+    (rs && i.price?.[rs.id] != null) ? `<span>${rowPrice(i, i.price[rs.id], rs.id)}</span>` : '',
+    (() => { const c = !i.ticked && cheaperElsewhere(i, rs); if (!c) return '';
+      return o.store ? `<button class="pill plain cam" data-a="moveItem" data-sid="${c.s.id}" aria-label="Buy at ${esc(c.s.name)} instead">↗ move to ${esc(c.s.name)} $${c.p.toFixed(2)}</button>`
+        : `<button class="pill plain cam" data-a="switchStore" data-sid="${c.s.id}" aria-label="Cheaper at ${esc(c.s.name)}">↗ ${esc(c.s.name)} $${c.p.toFixed(2)}</button>`; })(),
     i.hasPhoto ? `<button class="pill plain cam" data-a="photo" aria-label="Show photo">Photo</button>` : '',
     (i.addedBy && i.addedBy.uid !== S.user?.uid) ? `<span>+ ${esc(i.addedBy.name)}</span>` : '',
     (i.ticked && i.tickedBy && i.tickedBy.uid !== S.user?.uid) ? `<span>✓ ${esc(i.tickedBy.name)}</span>` : ''
@@ -461,7 +480,21 @@ function renderList(){
   let h = '';
   if (!all.length) h = `<p class="empty">Nothing on the list yet.<br>Type above, or tap a suggestion.</p>`;
   if (todo.length){
-    if (S.sort === 'shop'){
+    if (S.sort === 'store'){
+      const groups = new Map();
+      for (const i of todo){ const s = usualStore(i), k = s ? s.id : ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(i); }
+      const ids = [...groups.keys()].sort((a, b) => (b === st.id) - (a === st.id) || (a === '') - (b === '') || (S.stores.find(s => s.id === a)?.name || '').localeCompare(S.stores.find(s => s.id === b)?.name || ''));
+      for (const k of ids){
+        const s = S.stores.find(x => x.id === k), g = groups.get(k);
+        if (s) g.sort(cmpShop(s)); else g.sort(byName);
+        const priced = s ? g.filter(i => i.price?.[s.id] != null && lineCost(i, i.price[s.id]) != null) : [];
+        const est = priced.reduce((t, i) => t + lineCost(i, i.price[s.id]), 0);
+        h += `<div class="storehead"><h3 class="cathead">${s ? esc(s.name) : 'Not sure where yet'}</h3>
+          <span class="note">${g.length} item${g.length === 1 ? '' : 's'}${priced.length ? ` · ~$${est.toFixed(2)}` : ''}</span>
+          ${s && s.id !== st.id ? `<button class="btn sm" data-a="switchStore" data-sid="${s.id}">Shop here</button>` : ''}</div>
+          <ul class="rows">${g.map(i => row(i, { chip:true, store:s || undefined })).join('')}</ul>`;
+      }
+    } else if (S.sort === 'shop'){
       todo.sort(cmpShop(st));
       if (todo.length > 1) h += `<p class="hint">Order for ${esc(st.name)}. Drag the handles to fix it.</p>`;
       h += `<ul class="rows" id="shopRows">${todo.map(i => row(i, {grip:true, chip:true})).join('')}</ul>`;
@@ -631,6 +664,7 @@ function openEdit(id){
       <label class="cb"><input type="checkbox" id="f_urg" ${i.urgent ? 'checked' : ''}> We're out. Highlight it for the shopper</label>` : ''}
     ${i.misc ? '' : `<label>Repeat<select id="f_every">${[['','Never'],[7,'Every week'],[14,'Every 2 weeks'],[30,'Every month']].map(([v,l]) => `<option value="${v}" ${(i.every||'') == v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`}
     <label>Priced per<select id="f_unit"><option value="kg" ${perKg(i) ? 'selected' : ''}>kg (by weight)</option><option value="each" ${perKg(i) ? '' : 'selected'}>each (per item)</option></select></label>
+    ${i.misc ? '' : `<label>Usually buy at<select id="f_home"><option value="">Auto (cheapest / last bought)</option>${S.stores.map(s => `<option value="${s.id}" ${i.home === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>`}
     <label>Pack size (for $/kg or $/L and the recipes app)<input id="f_size" value="${esc(i.size || '')}" placeholder="400g, 1.5L, 6x375ml"></label>
     <label>Price at ${esc(curStore()?.name || 'this store')}<input id="f_price" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" value="${i.price?.[curStore()?.id] ?? ''}"></label>
     <h3>Photo</h3>
@@ -889,11 +923,18 @@ Rules:
 
 My items: ${names.join('; ')}`;
 
-function openReceipt(){
+// Shelf tags, flyers and online-shop screenshots: prices for a store without buying anything
+const SHELF_PROMPT = names => RECEIPT_PROMPT(names)
+  .replace('Here is a supermarket receipt.', 'These photos or screenshots show shelf price tags, a flyer or an online supermarket page (not a receipt).')
+  .replace('First line: "STORE: " followed by the shop\'s name as printed.', 'First line: "STORE: " followed by the shop\'s name if it is visible, otherwise "STORE: ".')
+  .replace('Rules:', 'Rules:\n- Each product is one line. Quantity is always 1 and the amount charged is the shelf price. Use the actual shelf price (sale price if shown, otherwise the normal price).\n- If a per-kg or per-litre price is shown for a packaged product, ignore it and give the pack price; put the pack size in the last column.');
+const rcPrompt = names => S.rcMode === 'shelf' ? SHELF_PROMPT(names) : RECEIPT_PROMPT(names);
+function openReceipt(mode = 'receipt'){
   const st = curStore(); if (!st) return;
-  openSheet(`<h2>Update prices</h2>
-    <p class="note">Prices are saved for <b>${esc(st.name)}</b>. Change the store at the top first if this receipt is from somewhere else.</p>
-    <div class="btns" style="margin-top:8px"><button class="btn tag" data-a="scanPick" id="scanBtn">Scan receipt photo</button></div>
+  S.rcMode = mode; const shelf = mode === 'shelf';
+  openSheet(`<h2>${shelf ? 'Shelf prices' : 'Update prices'}</h2>
+    <p class="note">${shelf ? `Photograph shelf tags, a flyer or a screenshot of an online shop to record prices without buying anything. Saved for <b>${esc(st.name)}</b> unless the photo names another store.` : `Prices are saved for <b>${esc(st.name)}</b>. Change the store at the top first if this receipt is from somewhere else.`}</p>
+    <div class="btns" style="margin-top:8px"><button class="btn tag" data-a="scanPick" id="scanBtn">${shelf ? 'Scan price photos' : 'Scan receipt photo'}</button></div>
     <p class="note" id="rcStatus">${localStorage.getItem('anthropicKey') ? 'Uses your API key saved on this phone. For a long receipt, select two or more photos.' : "Needs an Anthropic API key. You will be asked for it once per phone."}</p>
     <input type="file" id="rc_file" accept="image/*" multiple hidden>
     <h3>Or use the Claude app (free)</h3>
@@ -923,7 +964,7 @@ async function scanReceipt(files){
         model: CLAUDE_MODEL, max_tokens: 4000,
         messages: [{ role: 'user', content: [
           ...imgs.map(data => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } })),
-          { type: 'text', text: RECEIPT_PROMPT(names) }
+          { type: 'text', text: rcPrompt(names) }
         ] }]
       })
     });
@@ -1002,7 +1043,7 @@ function reviewReceipt(){
         </div>
         <div class="note" style="margin:2px 0 0">Spent $${r.amt.toFixed(2)}${r.pack ? ` · ${esc(r.pack.size)}` : ''}${r.pack && !(r.unit === 'kg') ? ` · ${(() => { const up = unitPrice({ unit:'each', cat:'', ...r.pack }, r.price); return up ? `$${up.v.toFixed(2)}/${up.u}` : ''; })()}` : ''}</div></div>`;
     }).join('')}
-    <div class="btns"><button class="btn pri" data-a="rcApply">Save prices</button><button class="btn" data-a="receipt">Back</button></div>`);
+    <div class="btns"><button class="btn pri" data-a="rcApply">Save prices</button><button class="btn" data-a="rcBack">Back</button></div>`);
 }
 async function applyReceipt(){
   const b = writeBatch(db), map = {}; let n = 0, st = curStore(), newStore = null;
@@ -1017,12 +1058,12 @@ async function applyReceipt(){
     const r = S.rc[+card.dataset.r], v = card.querySelector('.rsel').value, p = parseFloat(card.querySelector('.rprice').value);
     if (!v || isNaN(p)) return;
     let id = v;
-    const wantKg = card.querySelector('.runit').value === 'kg', spent = { amt: r.amt, at: Date.now() };
+    const wantKg = card.querySelector('.runit').value === 'kg', spent = { amt: r.amt, at: Date.now() }, shelf = S.rcMode === 'shelf';
     if (v === '__new'){
       const ref = doc(collection(db, 'items')); id = ref.id;
-      b.set(ref, { name:r.name, cat:'Other', misc:false, onList:false, ticked:false, qty:'', note:'', count:0, pos:{}, price:{ [st.id]: p }, spent:{ [st.id]: spent }, ...(wantKg ? { unit:'kg' } : {}), ...(!wantKg && r.pack ? r.pack : {}), created:serverTimestamp() });
+      b.set(ref, { name:r.name, cat:'Other', misc:false, onList:false, ticked:false, qty:'', note:'', count:0, pos:{}, price:{ [st.id]: p }, ...(shelf ? {} : { spent:{ [st.id]: spent } }),...(wantKg ? { unit:'kg' } : {}), ...(!wantKg && r.pack ? r.pack : {}), created:serverTimestamp() });
     } else {
-      const it = byId(id), u = { [`price.${st.id}`]: p, [`spent.${st.id}`]: spent };
+      const it = byId(id), u = { [`price.${st.id}`]: p, ...(shelf ? {} : { [`spent.${st.id}`]: spent }) };
       // learn: if the receipt disagrees with how this item is currently priced, remember it (or clear back to the category default)
       if (it && wantKg !== perKg(it)) u.unit = wantKg === defKg(it.cat) ? deleteField() : (wantKg ? 'kg' : 'each');
       // learn pack size from the receipt only when the item has none (keeps manual edits)
@@ -1037,6 +1078,34 @@ async function applyReceipt(){
   await b.commit();
   if (newStore || st.id !== S.storeId){ S.storeId = st.id; localStorage.setItem('storeId', st.id); }
   closeSheet(); toast(`Updated ${n} price${n===1?'':'s'} for ${st.name}`);
+}
+
+/* ---------- savings ---------- */
+function openSavings(){
+  S.liveSheet = openSavings;
+  const items = S.items.filter(i => !i.misc), money = n => `$${n.toFixed(2)}`;
+  // items priced at two or more stores, biggest gap (weighted by how often we buy) first
+  const cmp = items.map(i => {
+    const ps = S.stores.filter(s => i.price?.[s.id] != null).map(s => ({ s, p: i.price[s.id] })).sort((a, b) => a.p - b.p);
+    if (ps.length < 2) return null;
+    const best = ps[0], worst = ps[ps.length - 1], gap = worst.p - best.p;
+    return gap >= .05 && gap >= worst.p * .05 ? { i, best, worst, gap, w: gap * Math.max(1, i.count || 1) } : null;
+  }).filter(Boolean).sort((a, b) => b.w - a.w).slice(0, 25);
+  // regularly bought items with no price at a store that prices other things
+  const missing = S.stores.map(s => {
+    const known = items.filter(i => i.price?.[s.id] != null).length;
+    const list = known >= 3 ? items.filter(i => i.price?.[s.id] == null && Object.keys(i.price || {}).length && (i.count || 0) >= 2).sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, 8) : [];
+    return { s, list };
+  }).filter(m => m.list.length);
+  openSheet(`<h2>Savings</h2>
+    <p class="note">Based on the prices you've saved from receipts and shelf photos.</p>
+    <h3>Cheaper at another store</h3>
+    ${cmp.length ? cmp.map(c => `<div class="mini" data-id="${c.i.id}"><span class="grow"><b>${esc(c.i.name)}</b><br><span class="note">${esc(c.best.s.name)} ${money(c.best.p)} vs ${esc(c.worst.s.name)} ${money(c.worst.p)} · save ${money(c.gap)}${c.i.home === c.best.s.id ? ' · already buying there' : ''}</span></span>
+      ${c.i.home === c.best.s.id ? '' : `<button class="btn sm" data-a="moveItem" data-sid="${c.best.s.id}">Buy at ${esc(c.best.s.name)}</button>`}</div>`).join('')
+      : '<p class="note">Nothing to compare yet. You need prices for the same item at two stores. Use Shelf prices at the other store to get started.</p>'}
+    ${missing.length ? `<h3>Worth a price check</h3>${missing.map(m => `<p class="note" style="margin:6px 0"><b>${esc(m.s.name)}</b>: ${m.list.map(i => esc(i.name)).join(', ')}</p>`).join('')}
+      <div class="btns"><button class="btn sm" data-a="shelf">Shelf prices</button></div>` : ''}
+    <div class="btns"><button class="btn pri" data-a="closeSheet">Done</button></div>`);
 }
 
 /* ---------- settings ---------- */
@@ -1078,7 +1147,9 @@ function openSettings(view = 'main'){
     <div class="mini"><input id="newStore" placeholder="Add a store"><button class="btn sm pri" data-a="addStore">Add</button></div>
     <label class="cb"><input type="checkbox" id="copyOrder" checked> Copy the current store's item order</label>
     <h3>Categories</h3>
+    <p class="note">The store each category usually goes to, for the By store view. Items can override it.</p>
     ${[...S.cats].sort((a,b) => a.localeCompare(b)).map(c => `<div class="mini"><span class="grow">${esc(c)}</span>
+      <select data-a-change="catHome" data-c="${esc(c)}" style="flex:none;width:110px" aria-label="Usual store for ${esc(c)}"><option value="">Auto</option>${st.map(s => `<option value="${s.id}" ${S.catHome[c] === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>
       <button class="btn sm" data-a="renCat" data-c="${esc(c)}">Rename</button>
       ${c !== 'Other' ? `<button class="btn sm danger" data-a="delCat" data-c="${esc(c)}">✕</button>` : ''}</div>`).join('')}
     <div class="mini"><input id="newCat" placeholder="Add a category"><button class="btn sm pri" data-a="addCat">Add</button></div>
@@ -1106,6 +1177,10 @@ const A = {
   qtyInc: t => stepQty(t, 1),
   qtyDec: t => stepQty(t, -1),
   switchStore: t => { S.storeId = t.dataset.sid; localStorage.setItem('storeId', S.storeId); render(); toast(`Shopping at ${curStore().name}`); },
+  moveItem: async t => { const i = byId(t.closest('[data-id]').dataset.id), s = S.stores.find(x => x.id === t.dataset.sid); if (!i || !s) return;
+    await updateDoc(iref(i.id), { home: s.id }); toast(`${i.name}: buying at ${s.name}`); },
+  shelf: () => openReceipt('shelf'),
+  savings: openSavings,
   quick: t => addToList(byId(t.dataset.id)),
   voice: listenForItems,
   scan: scanBarcode,
@@ -1123,10 +1198,10 @@ const A = {
   scanPick: () => $('#rc_file').click(),
   setKey: () => { const k = (prompt('Paste your Anthropic API key. It is stored on this phone only.') || '').trim(); if (k){ localStorage.setItem('anthropicKey', k); toast('Key saved'); openSettings('main'); } },
   rmKey: () => { localStorage.removeItem('anthropicKey'); toast('Key removed'); openSettings('main'); },
-  receipt: openReceipt, rcMatch: reviewReceipt, rcApply: applyReceipt,
+  receipt: () => openReceipt('receipt'), rcBack: () => openReceipt(S.rcMode), rcMatch: reviewReceipt, rcApply: applyReceipt,
   copyPrompt: async () => {
     const names = S.items.filter(i => !i.misc).map(i => i.name).sort((a, b) => a.localeCompare(b));
-    try { await navigator.clipboard.writeText(RECEIPT_PROMPT(names)); toast('Prompt copied. Now open the Claude app.'); }
+    try { await navigator.clipboard.writeText(rcPrompt(names)); toast('Prompt copied. Now open the Claude app.'); }
     catch (e){ toast('Could not copy. Try again.'); }
   },
   photo: t => openPhoto(t.closest('[data-id]').dataset.id),
@@ -1170,6 +1245,7 @@ const A = {
     if ($('#f_every')){ const ev = +$('#f_every').value; upd.every = ev || deleteField(); if (!ev) upd.due = deleteField(); }
     const wantKg = $('#f_unit').value === 'kg';
     upd.unit = wantKg === defKg(upd.cat) ? deleteField() : (wantKg ? 'kg' : 'each');
+    if ($('#f_home')) upd.home = $('#f_home').value || deleteField();
     const sz = $('#f_size').value.trim(), pk = parsePack(sz);
     if (!sz) Object.assign(upd, { size: deleteField(), packG: deleteField(), packMl: deleteField() });
     else if (pk) Object.assign(upd, { packG: deleteField(), packMl: deleteField() }, pk);
@@ -1237,6 +1313,9 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   if (e.target.dataset.aChange === 'renameStore'){
     const v = e.target.value.trim(); if (v) updateDoc(doc(db,'stores',e.target.dataset.id), { name:v });
+  }
+  if (e.target.dataset.aChange === 'catHome'){
+    setDoc(doc(db,'meta','settings'), { catHome: { [e.target.dataset.c]: e.target.value || deleteField() } }, { merge:true });
   }
 });
 
